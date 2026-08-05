@@ -1,0 +1,12 @@
+# Large data files — not version-controlled
+data/
+
+# Virtual environment
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# OS junk
+.DS_Store
