@@ -56,8 +56,15 @@ $$W_{ij}(t) = s_i(t)\cdot \mu_{0,i}\cdot W_{ij}^{\text{gravity}}$$
 where:
 
 - $W_{ij}^{\text{gravity}}$ — gravity kernel from **total population and
-  distance** (Viboud 2006):
-  $$W_{ij}^{\text{gravity}} \propto \frac{\sqrt{N_i N_j}}{d_{ij}^{\alpha}}$$
+  distance**.  Two forms (see §6, decision 6):
+  - *classic* (Viboud 2006):
+    $$W_{ij}^{\text{gravity}} \propto \frac{\sqrt{N_i N_j}}{d_{ij}^{\alpha}}$$
+  - *data-calibrated* (default, 2026-08-05):
+    $$W_{ij}^{\text{gravity}} \propto \frac{N_j^{\,b_N}}{d_{ij}^{\,b_d}}$$
+    with $b_N \approx 1.00$, $b_d \approx 0.55$ estimated by PPML
+    (Poisson pseudo-ML, BFGS) on the BTS T-100 monthly panel
+    (56×56 inter-state flows, 2020-01 → 2023-03, origin + month fixed
+    effects).  The origin factor $N_i$ is irrelevant under row-normalisation.
   (row-normalised so that $\sum_j W_{ij}^{\text{gravity}} = 1$).
 - $s_i(t)$ — **per-state BTS-calibrated monthly scale factor**,
   $s_i(\text{Jan-2020}) = 1$.
@@ -153,8 +160,8 @@ $T_{\text{mo}}=30.44$ d when building $\mu_0$).
 
 **Working hypothesis throughout:**
 $$F_{ij}(t) \approx s_i(t)\cdot \mu_{0,i}\cdot W_{ij}^{\text{gravity}}.$$
-We trust this structure and fit the best parameters (gravity exponent
-$\alpha$, per-state $\mu_{0,i}$, per-month $s_i(t)$).
+We trust this structure and fit the best parameters (gravity exponents
+$b_N$, $b_d$, per-state $\mu_{0,i}$, per-month $s_i(t)$).
 
 ---
 
@@ -174,6 +181,7 @@ $\alpha$, per-state $\mu_{0,i}$, per-month $s_i(t)$).
 | $N_i$ | total population of state $i$ |
 | $d_{ij}$ | distance between states (or city hubs) |
 | $W_{ij}^{\text{gravity}}$ | gravity kernel, pop × distance, row-normalised |
+| $b_N, b_d$ | data-calibrated kernel exponents (PPML), $b_N\approx1.0$, $b_d\approx0.55$ |
 | $\mu_{0,i}$ | per-state baseline mobility (travellers/day) |
 | $s_i(t)$ | per-state monthly mobility scale (dimensionless), $s_i(\text{Jan-2020})=1$ |
 | $F_{ij}(t)$ | observed state→state passenger flow (travellers/month) |
@@ -215,6 +223,16 @@ $\alpha$, per-state $\mu_{0,i}$, per-month $s_i(t)$).
    and $s_i(t) = \sum_j F_{ij}(t)/\sum_j F_{ij}(\text{Jan-2020})$.
    This makes the model's total outbound from $i$ exactly match the
    observed total **per day** in every month (§4).
+6. **Gravity kernel (data-calibrated):** the classic $\sqrt{N_i N_j}/d^{\alpha}$
+   (Viboud 2006) is replaced by a kernel whose exponents are estimated from
+   the BTS T-100 panel (PPML, origin + month FE): $b_N \approx 1.00$,
+   $b_d \approx 0.55$, i.e.
+   $$W_{ij}^{\text{gravity}} \propto \frac{N_j^{b_N}}{d_{ij}^{b_d}},$$
+   row-normalised.  Classic form kept as an option for sensitivity.
+   Validation of the assumption "temporally calibrated gravity is right":
+   `scripts/gravity_validation.py`; the calibrated kernel lifts pooled
+   outbound-share correlation from Pearson 0.35 / Spearman 0.46 (classic)
+   to Pearson 0.45 / Spearman 0.58.
 
 **Still open (resolve during implementation):**
 
@@ -227,8 +245,8 @@ $\alpha$, per-state $\mu_{0,i}$, per-month $s_i(t)$).
   population density for **all 56 jurisdictions** (2020 Census; land areas
   cross-checked against the census tables — AK 1,518,800 km², DC 158 km²,
   AS 198 km², MP 472 km², GU 543 km², VI 348 km², PR 8,868 km²).  Loaded via
-  `data_loader.load_state_land_area_2020()`.  The density→⟨k⟩ scaling needs
-  only the two constants ⟨k⟩_0, γ (calibrated later, not a data issue).
+`data_loader.load_state_land_area_2020()`.  The density→⟨k⟩ scaling needs
+   only the two constants ⟨k⟩_0, ξ (calibrated later, not a data issue).
 - **The 56-node list is feasible** — 2020 Census populations verified for
   all five territories: PR 3,285,874, GU 153,836, VI 87,146, MP 47,329,
   AS 49,710.  NYT and BTS both cover all 56 jurisdictions, so no
@@ -273,9 +291,16 @@ give the same dimensionless $\theta \in [0,1]$.)
 **2. Inter-state coupling (per pair $i\to j$):**
 
 $$W_{ij}(t) = s_i(t)\cdot \mu_{0,i}\cdot W_{ij}^{\text{gravity}},\qquad
-W_{ij}^{\text{gravity}} \propto \frac{\sqrt{N_i N_j}}{d_{ij}^{\alpha}}
-\ \text{(row-normalised)}$$
+W_{ij}^{\text{gravity}} \propto \frac{N_j^{\,b_N}}{d_{ij}^{\,b_d}}
+\ \text{(row-normalised, data-calibrated; } b_N\approx1.00,\ b_d\approx0.55\text{)}$$
 
+- The classic $\sqrt{N_i N_j}/d^{\alpha}$ (Viboud 2006) is retained as an
+  option but is a **weaker predictor**: pooled outbound-share correlation vs
+  BTS data Pearson 0.35 / Spearman 0.46, vs Pearson 0.45 / Spearman 0.58 for
+  the calibrated kernel (validation: `scripts/gravity_validation.py`).
+  The classic form also over-decays in distance ($\hat b_d \approx -0.55$
+  vs $-\alpha = -2$) and underpredicts the destination-population elasticity
+  ($\hat b_N \approx 1.0$ vs $0.5$).
 - **$\mu_{0,i}$**: per-state constant (pre-pandemic baseline mobility).
 - **$s_i(t)$: per state** (not one national curve) — a separate multiplier
   from $\mu_{0,i}$ (previously $s(t)$ was used directly as $\mu(t)$).
@@ -319,7 +344,8 @@ This makes the model's total outbound from each state exactly match the
 observed total in every month (consistent with the per-state outbound
 ratios in `bts_state_monthly.csv`).  Working hypothesis:
 $F_{ij}(t) \approx s_i(t)\,\mu_{0,i}\,W_{ij}^{\text{gravity}}$; we only fit
-the best parameters ($\alpha$, per-state $\mu_{0,i}$, per-month $s_i(t)$).
+the best parameters (kernel exponents $b_N$, $b_d$; per-state $\mu_{0,i}$;
+per-month $s_i(t)$).
 
 **5. Data requirements.** Real census populations for all 56 jurisdictions
 (51 are already in `metapopulation.py`; census data for PR/GU/VI/MP/AS
