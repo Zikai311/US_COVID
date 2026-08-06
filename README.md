@@ -57,7 +57,8 @@ Finial_Project/
 │   ├── 03_network_sir.ipynb
 │   ├── 04_degree_based_sir.ipynb
 │   ├── 05_abm.ipynb
-│   ├── 06_covid_case_study.ipynb     # NYT COVID-19 data
+│   ├── 06_covid_case_study.ipynb     # rewritten 2026-08-06: layperson walkthrough
+│   │                              #   of the final SEIRV model (build_nb06.py)
 │   ├── 07_conclusion.ipynb
 │   ├── 07_data_analysis.ipynb        # data-only panels (no fitting)
 │   ├── 08_metapopulation.ipynb       # rebuilt 2026-08-06 (build_nb08.py)
@@ -78,6 +79,7 @@ Finial_Project/
 │   └── utils.py       # Helper functions
 │
 ├── scripts/            # Reproducible notebook builders + validation
+│   ├── build_nb06.py  # regenerates notebooks/06_covid_case_study.ipynb
 │   ├── build_nb08.py  # regenerates notebooks/08_metapopulation.ipynb
 │   ├── build_appendix_a.py  # regenerates notebooks/appendix_A.ipynb
 │   ├── build_appendix_b.py  # regenerates notebooks/appendix_B.ipynb
@@ -206,7 +208,7 @@ Individual-level simulation:
 ## Visualizations
 
 The project generates:
-- **53 figures in `assets/`** (currently fig29–fig81, dpi=300): epidemic
+- **58 figures in `assets/`** (currently fig29–fig86, dpi=300): epidemic
   dynamics, parameter sweeps, network structures, degree distributions,
   (notebook 08) gravity-kernel validation, per-state β estimates, national &
   state fits, spatial onset timing, mobility sensitivity, the β(t) NPI fit, and the SEIRV
@@ -257,7 +259,8 @@ Optional:
 - [x] Core modules (SIR, SEIR, Network SIR, Degree-based, ABM)
 - [x] Visualization utilities
 - [x] Animation framework
-- [x] Notebooks 00–06 (introduction → COVID-19 case study)
+- [x] Notebooks 00–06 (introduction → COVID-19 case study); 06 rewritten
+      2026-08-06 as a layperson walkthrough of the final SEIRV model (fig82–86)
 - [x] Notebook 07 conclusion **and** 07_data_analysis (data-only panels,
       2026-08-05: all SIR/SEIR fitting removed)
 - [x] Notebook 08 metapopulation — **rebuilt 2026-08-06** with
@@ -279,7 +282,7 @@ Optional:
 
 ### Estimated Completion
 - Complete: all planned notebooks and modules build and execute
-- Figures: 53 in `assets/` (fig29–fig81)
+- Figures: 58 in `assets/` (fig29–fig86)
 
 ---
 
