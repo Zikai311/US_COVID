@@ -61,7 +61,8 @@ Finial_Project/
 │   ├── 07_conclusion.ipynb
 │   ├── 07_data_analysis.ipynb        # data-only panels (no fitting)
 │   ├── 08_metapopulation.ipynb       # rebuilt 2026-08-06 (build_nb08.py)
-│   └── appendix_A.ipynb              # gravity data-reconstruction report (build_appendix_a.py)
+│   ├── appendix_A.ipynb              # gravity data-reconstruction report (build_appendix_a.py)
+│   └── appendix_B.ipynb              # Omicron wave-5 run (build_appendix_b.py)
 │
 ├── src/                # Python modules
 │   ├── sir.py         # SIR model implementation
@@ -79,6 +80,7 @@ Finial_Project/
 ├── scripts/            # Reproducible notebook builders + validation
 │   ├── build_nb08.py  # regenerates notebooks/08_metapopulation.ipynb
 │   ├── build_appendix_a.py  # regenerates notebooks/appendix_A.ipynb
+│   ├── build_appendix_b.py  # regenerates notebooks/appendix_B.ipynb
 │   ├── gravity_validation.py
 │   ├── gravity_corr_states.csv
 │   └── appendixA_state_corr.csv
@@ -204,7 +206,7 @@ Individual-level simulation:
 ## Visualizations
 
 The project generates:
-- **49 figures in `assets/`** (currently fig29–fig77, dpi=300): epidemic
+- **51 figures in `assets/`** (currently fig29–fig79, dpi=300): epidemic
   dynamics, parameter sweeps, network structures, degree distributions,
   (notebook 08) gravity-kernel validation, per-state β estimates, national &
   state fits, spatial onset timing, mobility sensitivity, the β(t) NPI fit, and the SEIRV
@@ -265,6 +267,8 @@ Optional:
       §8.12 mobility sensitivity vs saturated per-pair flows,
       §8.13 time-varying β(t) from Google CMR / OxCGRT,
       §8.14 SEIRV vaccination from CDC data)
+- [x] Appendix B — Omicron (wave 5) run: immune-escape SEIRV grid,
+      honest limits (peak 2 months late; needs behavioural β(t) collapse)
 - [x] Appendix A — gravity data-reconstruction report
       (`notebooks/appendix_A.ipynb`, `scripts/build_appendix_a.py`):
       calibrated gravity model vs raw BTS T-100 flows, all validation tests
@@ -274,7 +278,7 @@ Optional:
 
 ### Estimated Completion
 - Complete: all planned notebooks and modules build and execute
-- Figures: 49 in `assets/` (fig29–fig77)
+- Figures: 51 in `assets/` (fig29–fig79)
 
 ---
 
