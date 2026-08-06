@@ -204,11 +204,11 @@ Individual-level simulation:
 ## Visualizations
 
 The project generates:
-- **47 figures in `assets/`** (currently fig29–fig75, dpi=300): epidemic
+- **48 figures in `assets/`** (currently fig29–fig76, dpi=300): epidemic
   dynamics, parameter sweeps, network structures, degree distributions,
   (notebook 08) gravity-kernel validation, per-state β estimates, national &
-  state fits, spatial onset timing, and mobility sensitivity, plus
-  (appendix A) the data-reconstruction figures fig68–fig74
+  state fits, spatial onset timing, mobility sensitivity, and the β(t) NPI
+  fit, plus (appendix A) the data-reconstruction figures fig68–fig74
 - **3-5 animations** of spreading processes (abm.py/network_sir.py)
 - Phase portraits, heatmaps, degree distributions
 
@@ -262,7 +262,8 @@ Optional:
       `src/fused_metapopulation.py` + `scripts/build_nb08.py`
       (56 jurisdictions, 2020-01→2023-03 BTS mobility, calibrated gravity
       kernel, per-state β with R₀≤4 cap, ~44k-ODE coupled degree-SEIR,
-      §8.12 mobility sensitivity vs saturated per-pair flows)
+      §8.12 mobility sensitivity vs saturated per-pair flows,
+      §8.13 time-varying β(t) from Google CMR / OxCGRT)
 - [x] Appendix A — gravity data-reconstruction report
       (`notebooks/appendix_A.ipynb`, `scripts/build_appendix_a.py`):
       calibrated gravity model vs raw BTS T-100 flows, all validation tests
@@ -272,7 +273,7 @@ Optional:
 
 ### Estimated Completion
 - Complete: all planned notebooks and modules build and execute
-- Figures: 47 in `assets/` (fig29–fig75)
+- Figures: 48 in `assets/` (fig29–fig76)
 
 ---
 
@@ -346,7 +347,8 @@ This is an educational project. Potential enhancements:
 - [x] Real data fitting (COVID-19, notebooks 06 + 08)
 - [ ] Vaccination models (SIRV)
 - [ ] Age-structured models
-- [ ] Time-varying β (NPI) in the metapopulation (notebook 08 §8.11 follow-up)
+- [x] Time-varying β (NPI) in the metapopulation (notebook 08 §8.13, Google
+      CMR / OxCGRT drivers); next: two-regime or Rₜ-anchored β(t)
 - [ ] GPU-accelerated ABM
 
 ---

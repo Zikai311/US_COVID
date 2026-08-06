@@ -346,7 +346,8 @@ class FusedMetapopulationSEIR:
     """
 
     def __init__(self, state_list, populations, W_grav, mu0, s_func,
-                 k_vals, P_k, beta, sigma, gamma, W_tensor=None, months=None):
+                 k_vals, P_k, beta, sigma, gamma, W_tensor=None, months=None,
+                 beta_scale=None):
         self.states = list(state_list)
         self.n = len(self.states)
         self.idx = {s: i for i, s in enumerate(self.states)}
@@ -358,6 +359,12 @@ class FusedMetapopulationSEIR:
         # reproduces the observed flows exactly; overrides W_grav·μ0·s.
         self.W_tensor = np.asarray(W_tensor, dtype=float) if W_tensor is not None else None
         self.month_starts = self._build_month_starts(months)
+        # time-varying transmission: beta_scale (n, T) monthly multipliers,
+        # beta_i(t) = beta0_i * beta_scale[i, month(t)]  (None -> constant β)
+        if beta_scale is not None and months is None:
+            raise ValueError('beta_scale requires months= (monthly grid)')
+        self.beta_scale = (np.asarray(beta_scale, dtype=float)
+                           if beta_scale is not None else None)
         self.k = np.asarray(k_vals, dtype=float)
         self.P = np.asarray(P_k, dtype=float)
         self.K = len(self.k)
@@ -443,8 +450,13 @@ class FusedMetapopulationSEIR:
         # (P(k) cancels: an infectious class-k node owns k stubs; total stubs = N_i<k>)
         theta = (I @ self.k) / (self.N * self.mean_k)  # (n,)
 
+        # time-varying transmission: beta_i(t) = beta0_i · beta_scale[i, month(t)]
+        beta_t = self.beta
+        if self.beta_scale is not None:
+            beta_t = beta_t * self.beta_scale[:, self._month_index(int(np.floor(t)))]
+
         # local dynamics (counts)
-        inf = self.beta[:, None] * self.k[None, :] * S * theta[:, None]
+        inf = beta_t[:, None] * self.k[None, :] * S * theta[:, None]
         dS_l = -inf
         dE_l = inf - self.sigma * E
         dI_l = self.sigma * E - self.gamma * I
@@ -561,3 +573,74 @@ def fit_beta_from_growth(df_states, state_list, sigma, gamma,
     med = np.nanmedian(beta)
     beta[~ok] = med
     return beta, r, ok
+
+
+# ── time-varying β: mobility/NPI-driven beta_scale builders ────────────────
+
+def cmr_beta_scale(cmrs, months, state_list=None, category='transit',
+                   theta=1.0, min_scale=0.05):
+    """
+    Build the (n, T) monthly transmission multipliers from Google Community
+    Mobility Reports (data/google_cmr_state_monthly.csv):
+
+        g_i(t) = clip(1 + theta·pct_i(t)/100, min_scale, None)
+
+    pct_i(t) = monthly mean % change vs the Jan-2020 baseline of category
+    (default 'transit' — stations visits, the most direct contact proxy;
+    alternatives: 'workplaces', 'retail', 'residential' (inverse)).
+
+    beta_i(t) = beta0_i · g_i(t).  theta = 1 -> transmission scales exactly
+    with mobility; theta < 1 -> partial contact reduction reaches β.
+
+    Missing data (territories, months before 2020-02, after 2022-10):
+    falls back to the national 'US' series, then to 1.0 (no reduction).
+    """
+    states = list(state_list or JURISDICTIONS)
+    n = len(states)
+    T = len(months)
+    grid = [f'{y:04d}-{m:02d}' for y, m in months]
+    pivot = cmrs.pivot_table(index='code', columns='month', values=category)
+    scale = np.ones((n, T))
+    nat = pivot.loc['US'] if 'US' in pivot.index else None
+    for i, st in enumerate(states):
+        if st in pivot.index:
+            ser = pivot.loc[st].reindex(grid)
+            base = ser.to_numpy(dtype=float)
+        elif nat is not None:
+            base = nat.reindex(grid).to_numpy(dtype=float)
+        else:
+            continue
+        g = 1.0 + theta * base / 100.0
+        g = np.where(np.isnan(g), 1.0, np.clip(g, min_scale, None))
+        scale[i] = g
+    return scale
+
+
+def stringency_beta_scale(ox, months, state_list=None, lambda_=0.5,
+                          min_scale=0.05):
+    """
+    Alternative transmission driver from the Oxford stringency index
+    (data/oxcgrt_state_monthly.csv, 0-100):
+
+        g_i(t) = clip(exp(-lambda_·str_i(t)/100), min_scale, None)
+
+    beta_i(t) = beta0_i · g_i(t).  lambda_ = 0.5 -> 39% β reduction at
+    stringency 100; lambda_ = 1.0 -> 63%.  Missing (territories/DC,
+    months without data): fall back to national mean, then 1.0.
+    """
+    states = list(state_list or JURISDICTIONS)
+    n = len(states)
+    T = len(months)
+    grid = [f'{y:04d}-{m:02d}' for y, m in months]
+    pivot = ox.pivot_table(index='code', columns='month', values='stringency')
+    scale = np.ones((n, T))
+    nat_mean = float(pivot.to_numpy().mean())
+    for i, st in enumerate(states):
+        if st in pivot.index:
+            ser = pivot.loc[st].reindex(grid)
+            base = ser.to_numpy(dtype=float)
+        else:
+            base = np.full(T, nat_mean)
+        base = np.where(np.isnan(base), nat_mean, base)
+        scale[i] = np.clip(np.exp(-lambda_ * base / 100.0), min_scale, None)
+    return scale

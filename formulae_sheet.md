@@ -1,7 +1,8 @@
 # Fused Degree-Based SEIR × Metapopulation Model — Formula Sheet
 
 **PART II (2026-08-05), amended 2026-08-06** (θ stub-fraction form;
-per-state β calibration with R₀ cap; intra-state self-flow exclusion).
+per-state β calibration with R₀ cap; intra-state self-flow exclusion;
+time-varying β(t) from Google CMR / OxCGRT, §6 decision 10).
 Replaces the old "single-population SEIR +
 gravity mobility" sheet. Each state/node is a **degree-based SEIR** model
 (notebook 04) embedded in a **gravity metapopulation** (notebook 08);
@@ -294,6 +295,24 @@ $b_N$, $b_d$, per-state $\mu_{0,i}$, per-month $s_i(t)$).
     totals by ≈ −23 % and per-state onsets by ≈ +7 days vs gravity — the
     mobility mode is material for seeding, so keep this in mind when
     interpreting §8.8–§8.10.
+10. **Time-varying β(t) — the NPI channel** (2026-08-06, notebook 08 §8.13;
+    data: Google CMR + OxCGRT, fetched by `scripts/fetch_mobility_beta_data.py`
+    → `data/google_cmr_state_*` / `data/oxcgrt_state_*`):
+    $$\beta_i(t) = \beta_{0,i}\, g_i(t),$$
+    with either the behaviour-driven CMR multiplier
+    $g_i(t) = 1 + \theta\, c_i(t)/100$ (c = monthly % change of transit
+    stations vs baseline) or the policy-driven
+    $g_i(t) = e^{-\lambda\, s_i(t)/100}$ (s = Oxford stringency, 0–100).
+    $g_i$ is **March-normalised** ($g_i(\text{Mar-2020}) = 1$) so the β₀
+    March-growth calibration keeps its meaning; territories fall back to the
+    national US series. One global θ (or λ) is grid-searched. Result (nb08
+    §8.13, CMR θ = 2.0): post-peak decline reproduced (April dip ≈ 33 % vs
+    observed ≈ 35 %), π̂ collapses 29.8 → 3.4; but the mobility-proportional
+    β **over-recovers in June** (model ≈ 17.5× observed) — the mobility →
+    transmission mapping is regime-dependent, so a two-regime β(t) or an
+    Rₜ-anchored β is the documented next step. The stringency driver fails
+    to produce a decline at λ ≤ 2 (April stringency ≈ 82 leaves Rₜ ≈ 2.2
+    against R₀ = 4).
 
 **Still open (resolve during implementation):**
 

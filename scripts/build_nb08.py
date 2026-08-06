@@ -50,6 +50,7 @@ from fused_metapopulation import (
     T_MO, build_distance_matrix, build_gravity_kernel, fit_gravity_exponents,
     calibrate_mobility, s_interpolator, truncated_power_law,
     power_law_alpha_for_mean_k, FusedMetapopulationSEIR,
+    cmr_beta_scale, stringency_beta_scale,
 )
 from data_loader import load_us_states, load_state_land_area_2020
 
@@ -589,7 +590,155 @@ axes[1].grid(alpha=0.3)
 plt.tight_layout()
 plt.savefig(f'{ASSETS}/fig75_mobility_sensitivity.png'); plt.show()
 show_fig(f'{ASSETS}/fig75_mobility_sensitivity.png')"""))
-cells.append(code("""print('notebook 08 rebuild complete | figures fig59..fig67 + fig75 -> assets/')"""))
+
+cells.append(md(r"""## §8.13 Time-varying β(t) — the NPI channel
+
+§8.11's biggest "cannot": **post-peak decline** — constant β can never
+produce the April lockdown drop. The minimal fix is a time-varying
+transmission rate driven by *external* NPI/behaviour data (one fitted
+parameter, not a free curve):
+
+$$\beta_i(t) = \beta_{0,i}\cdot g_i(t)$$
+
+Two candidate drivers (both monthly, aligned to the model grid):
+
+- **Google Community Mobility (CMR, `data/google_cmr_state_monthly.csv`)** —
+  behaviour-driven: $g_i(t) = 1 + \theta\, c_i(t)/100$, $c_i(t)$ = monthly
+  % change vs baseline of *transit stations* (most direct contact proxy;
+  workplaces/retail/residential as alternatives).
+- **Oxford stringency (OxCGRT, `data/oxcgrt_state_monthly.csv`)** —
+  policy-driven: $g_i(t) = e^{-\lambda\, s_i(t)/100}$, $s_i$ = stringency 0–100.
+
+**March normalisation.** β₀ was calibrated from the March growth slope under
+constant β; a raw driver would cut March transmission and break the early
+ramp. We therefore rescale $g_i$ so March-2020 = 1 (β₀ keeps its meaning;
+April+ carry the reduction), and grid-search the single parameter θ (or λ)
+on the national log-RMSE. Territories without CMR/stringency data use the
+national fallback (built into the helpers)."""))
+cells.append(code("""cmrs = pd.read_csv('../data/google_cmr_state_monthly.csv')
+oxm = pd.read_csv('../data/oxcgrt_state_monthly.csv')
+
+def march_norm(g):
+    return g / g[:, 2:3]                      # Mar-2020 = 1 (preserve β0 calibration)
+
+def eval_scale(scale):
+    m = FusedMetapopulationSEIR(
+        JURISDICTIONS, CENSUS_POPULATIONS, W_cal, mu0, s_func,
+        k_vals, P_k, beta=bs.values, sigma=sigma, gamma=gamma,
+        beta_scale=scale, months=months)
+    m.simulate(TMAX, I0, E0, t0=T0)
+    ni = m.daily_new_infections().sum(0)
+    ph = ni.sum() / nat_obs.sum()
+    rm = np.sqrt(np.mean((np.log(ni / ph + 1) - np.log(nat_obs + 1)) ** 2))
+    rm_d = np.sqrt(np.mean((np.log(ni / ph + 1)[45:105]
+                            - np.log(nat_obs + 1)[45:105]) ** 2))  # Apr 15-Jun 15
+    pk = int(np.argmax(ni))
+    return ni, ph, rm, rm_d, pk
+
+rows = []
+for theta in np.arange(0.2, 2.01, 0.1):
+    g = march_norm(cmr_beta_scale(cmrs, months, category='transit', theta=theta))
+    ni, ph, rm, rm_d, pk = eval_scale(g)
+    rows.append(('CMR transit', theta, rm, ph, pk, ni))
+for lam in np.arange(0.1, 2.01, 0.1):
+    g = march_norm(stringency_beta_scale(oxm, months, lambda_=lam))
+    ni, ph, rm, rm_d, pk = eval_scale(g)
+    rows.append(('stringency', lam, rm, ph, pk, ni))
+
+grid = pd.DataFrame([r[:5] for r in rows], columns=['driver', 'param', 'log_RMSE',
+                                                    'pi_hat', 'peak_day'])
+# decline test: the NPI channel must actually produce a real post-April dip
+# (May min < 90% of the Mar-Apr peak); among those, best full-window log-RMSE.
+cand_rows = []
+for (drv, p, rm, ph, pk, ni) in rows:
+    apr_peak = float(ni[10:45].max())       # abs days 70..105
+    may_min = float(ni[55:85].min())        # abs days 115..145
+    if may_min < 0.9 * apr_peak:
+        cand_rows.append((drv, p, rm, ph, pk, apr_peak, may_min))
+cand = pd.DataFrame(cand_rows, columns=['driver', 'param', 'log_RMSE', 'pi_hat',
+                                        'peak_day', 'apr_peak', 'may_min'])
+print('candidates with a real April decline (May min < 90% of Apr peak):')
+print(cand.sort_values('log_RMSE').head(6).to_string(index=False,
+      float_format=lambda v: f'{v:.3f}'))
+print(f'excluded (no dip): {len(grid) - len(cand)}/{len(grid)} grid points')
+
+best = cand.sort_values('log_RMSE').iloc[0]
+drv, pbest = best.driver, best.param
+g_best = march_norm(cmr_beta_scale(cmrs, months, category='transit', theta=pbest)) if drv == 'CMR transit' \
+    else march_norm(stringency_beta_scale(oxm, months, lambda_=pbest))
+ni2, ph2, rm2, rmd2, pk2 = eval_scale(g_best)
+nat2v = ni2
+r2l0 = 1 - np.sum((np.log(nat_model / pi_hat + 1) - np.log(nat_obs + 1)) ** 2) / np.sum((np.log(nat_obs + 1) - np.log(nat_obs + 1).mean()) ** 2)
+r2l2 = 1 - np.sum((np.log(nat2v / ph2 + 1) - np.log(nat_obs + 1)) ** 2) / np.sum((np.log(nat_obs + 1) - np.log(nat_obs + 1).mean()) ** 2)
+r2v0 = 1 - np.sum((nat_model / pi_hat - nat_obs) ** 2) / np.sum((nat_obs - nat_obs.mean()) ** 2)
+r2v2 = 1 - np.sum((nat2v / ph2 - nat_obs) ** 2) / np.sum((nat_obs - nat_obs.mean()) ** 2)
+depth = 100 * (1 - best.may_min / best.apr_peak)
+jun_end = float(nat2v[-1])
+jun_obs = float(nat_obs[-1])
+print(f'selected: {drv} param={pbest:.1f}')
+print(f'pi-hat: {pi_hat:.1f} -> {ph2:.2f}')
+print(f'April dip: peak {best.apr_peak:,.0f} -> May min {best.may_min:,.0f} '
+      f'({depth:.0f}% drop; observed ~35%)')
+print(f'June end: model {jun_end:,.0f}/d vs observed {jun_obs:,.0f}/d '
+      f'({jun_end/jun_obs:.1f}x — mobility-driven over-recovery)')
+print(f'R2(linear): const-beta {r2v0:.2f} -> beta(t) {r2v2:.2f}')
+print(f'R2(log)   : const-beta {r2l0:.2f} -> beta(t) {r2l2:.2f}')"""))
+
+cells.append(code("""g_nat = g_best.mean(0)
+fig, axes = plt.subplots(1, 2, figsize=(12.5, 4.3))
+axes[0].plot(dates, nat_obs, lw=1.4, color='k', label='observed (smoothed)')
+axes[0].plot(dates, nat_model / pi_hat, lw=1.3, color='C0', ls=':', label='const-β (own π̂)')
+axes[0].plot(dates, nat2v / ph2, lw=1.3, color='C2', label=f'β(t) {drv} (own π̂)')
+axes[0].set_ylabel('reported-scale new cases / day')
+axes[0].set_title(f'National fit with time-varying β(t)\\nπ̂: {pi_hat:.1f} -> {ph2:.2f} | best {drv} θ={pbest:.1f}')
+axes[0].xaxis.set_major_formatter(mdates.DateFormatter('%b'))
+axes[0].legend(fontsize=7); axes[0].grid(alpha=0.3)
+months_dates = [pd.Timestamp(f'{y:04d}-{m:02d}-15') for y, m in months[:7]]
+axes[1].plot(months_dates, g_nat[:7], 'o-', color='C2')
+for i, (y, m) in enumerate(months[:7]):
+    axes[1].annotate(f'{y}-{m:02d}', (months_dates[i], g_nat[i]), fontsize=6,
+                     xytext=(0, 4), textcoords='offset points', ha='center')
+axes[1].axhline(1, color='grey', lw=0.6, ls=':')
+axes[1].set_title('National transmission multiplier g(t) (CMR transit, Mar=1)')
+axes[1].set_ylabel('β multiplier'); axes[1].grid(alpha=0.3)
+plt.tight_layout()
+plt.savefig(f'{ASSETS}/fig76_beta_t_fit.png'); plt.show()
+show_fig(f'{ASSETS}/fig76_beta_t_fit.png')"""))
+
+cells.append(md(r"""### §8.13 honest reading
+
+Selected: **CMR transit, θ = 2.0** (supra-proportional: with R₀ capped at 4,
+the April mobility drop alone would leave Rₜ ≈ 1.8 — the fit needs the
+contact reduction to bite harder than raw mobility suggests).
+
+**What the NPI channel fixes**
+
+- **Post-peak decline reproduced**: the monotonic climb is gone — the model
+  now peaks in early April and dips 33 % into May (observed ≈ 35 %).
+- **Over-infection collapses**: π̂ = 29.8 → 3.4 — most of the "excess"
+  infections were the missing NPI channel, not the mobility or kernel.
+- R²(log) improves −3.18 → −2.29.
+
+**What it reveals (why R² stays negative)**
+
+- **June over-recovery (the big one)**: a mobility-proportional β re-ignites
+  the epidemic as CMR recovers (June transit ≈ −30 % → Rₜ ≈ 1.6): model
+  ends at ≈ 830k/day vs observed 47k/day (**17.5×**). In reality Rₜ stayed
+  ≈ 1 through summer — continued distancing/testing/isolation that the raw
+  mobility indices do not measure. **The mobility→transmission mapping is
+  not proportional: it is regime-dependent** (lockdown regime vs sustained
+  behaviour change). A two-regime β(t), or anchoring β(t) to an
+  Rₜ estimate, is the natural next step.
+- **Stringency driver fails the decline test** at λ ≤ 2: April stringency
+  (monthly mean ≈ 82) leaves Rₜ ≈ 2.2 against R₀ = 4 — the policy index
+  alone cannot shut off the epidemic at monthly resolution.
+- The single-constant π̂ scaling still misaligns the level (§8.8 artifact),
+  and per-state onset order is unchanged.
+
+**Still one fitted parameter** (θ), on an external covariate — the model
+gains the NPI channel without absorbing the residual by hand."""))
+
+cells.append(code("""print('notebook 08 rebuild complete | figures fig59..fig67 + fig75, fig76 -> assets/')"""))
 
 nb['cells'] = cells
 nb['metadata'] = {
