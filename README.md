@@ -60,7 +60,8 @@ Finial_Project/
 │   ├── 06_covid_case_study.ipynb     # NYT COVID-19 data
 │   ├── 07_conclusion.ipynb
 │   ├── 07_data_analysis.ipynb        # data-only panels (no fitting)
-│   └── 08_metapopulation.ipynb       # rebuilt 2026-08-06 (build_nb08.py)
+│   ├── 08_metapopulation.ipynb       # rebuilt 2026-08-06 (build_nb08.py)
+│   └── appendix_A.ipynb              # gravity data-reconstruction report (build_appendix_a.py)
 │
 ├── src/                # Python modules
 │   ├── sir.py         # SIR model implementation
@@ -77,10 +78,12 @@ Finial_Project/
 │
 ├── scripts/            # Reproducible notebook builders + validation
 │   ├── build_nb08.py  # regenerates notebooks/08_metapopulation.ipynb
+│   ├── build_appendix_a.py  # regenerates notebooks/appendix_A.ipynb
 │   ├── gravity_validation.py
-│   └── gravity_corr_states.csv
+│   ├── gravity_corr_states.csv
+│   └── appendixA_state_corr.csv
 │
-├── assets/            # Figures (fig59–fig67 from notebook 08, dpi=300)
+├── assets/            # Figures (fig29–fig73, dpi=300)
 │   ├── figures/      # (unused; notebooks write to assets/ root)
 │   ├── gifs/
 │   └── videos/
@@ -201,10 +204,11 @@ Individual-level simulation:
 ## Visualizations
 
 The project generates:
-- **39 figures in `assets/`** (currently fig29–fig67, dpi=300): epidemic
-  dynamics, parameter sweeps, network structures, degree distributions, and
+- **45 figures in `assets/`** (currently fig29–fig73, dpi=300): epidemic
+  dynamics, parameter sweeps, network structures, degree distributions,
   (notebook 08) gravity-kernel validation, per-state β estimates, national &
-  state fits, and spatial onset timing
+  state fits, and spatial onset timing, plus (appendix A) the data-
+  reconstruction figures fig68–fig73
 - **3-5 animations** of spreading processes (abm.py/network_sir.py)
 - Phase portraits, heatmaps, degree distributions
 
@@ -258,11 +262,15 @@ Optional:
       `src/fused_metapopulation.py` + `scripts/build_nb08.py`
       (56 jurisdictions, 2020-01→2023-03 BTS mobility, calibrated gravity
       kernel, per-state β with R₀≤4 cap, ~44k-ODE coupled degree-SEIR)
+- [x] Appendix A — gravity data-reconstruction report
+      (`notebooks/appendix_A.ipynb`, `scripts/build_appendix_a.py`):
+      calibrated gravity model vs raw BTS T-100 flows, all validation tests
+      of `scripts/gravity_validation.py` re-run on the PPML-calibrated kernel
 - [x] Gravity-kernel validation (`scripts/gravity_validation.py`)
 
 ### Estimated Completion
 - Complete: all planned notebooks and modules build and execute
-- Figures: 39 in `assets/` (fig29–fig67)
+- Figures: 45 in `assets/` (fig29–fig73)
 
 ---
 
