@@ -59,9 +59,9 @@ Finial_Project/
 │   ├── 05_abm.ipynb
 │   ├── 06_covid_case_study.ipynb     # rewritten 2026-08-06: layperson walkthrough
 │   │                              #   of the final SEIRV model (build_nb06.py)
-│   ├── 07_conclusion.ipynb
 │   ├── 07_data_analysis.ipynb        # data-only panels (no fitting)
 │   ├── 08_metapopulation.ipynb       # rebuilt 2026-08-06 (build_nb08.py)
+│   └── 09_conclusion.ipynb            # final synthesis → our COVID model
 │   ├── appendix_A.ipynb              # gravity data-reconstruction report (build_appendix_a.py)
 │   └── appendix_B.ipynb              # Omicron wave-5 run (build_appendix_b.py)
 │
