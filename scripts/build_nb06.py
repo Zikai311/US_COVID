@@ -203,7 +203,11 @@ Three factors:
    It is called "gravity" because it has the same form as Newton's law:
    mass (population) attracts, distance decays. The exponents 1.0 and 0.55
    are not guesses — they are estimated statistically from the real
-   2020–2023 US airline data (Step 4).
+   2020–2023 US airline data (Step 4).  Note that the *origin* population
+   does not appear here: after normalising each state's shares to sum to
+   1, any origin-only factor cancels.  The origin's size still matters —
+   it sets how many people leave each state (the baseline flow $\mu_{0,i}$
+   below) — but not the direction mix.
 2. **Baseline flow** $\mu_{0,i}$: how many people left state $i$ per day,
    on average, before the pandemic (January 2020).
 3. **Travel scale** $s_i(t)$: each month's actual travel volume divided by
