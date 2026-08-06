@@ -129,7 +129,7 @@ for a, b, lab in arrows:
     ax.add_patch(FancyArrowPatch((pos[a], 1.1), (pos[b] - 0.4, 1.1),
                                  arrowstyle='-|>', mutation_scale=18, color='k'))
     ax.text((pos[a] + pos[b]) / 2 - 0.35, 1.42, lab, fontsize=10, color='#7B241C')
-ax.set_title('Four compartments, three arrows: one person\'s journey through the disease', fontsize=12)
+ax.set_title('Four compartments, three arrows: one person\\'s journey through the disease', fontsize=12)
 plt.tight_layout(); plt.savefig(f'{ASSETS}/fig82_compartment.png'); plt.show()
 show_fig(f'{ASSETS}/fig82_compartment.png')"""))
 
@@ -321,7 +321,7 @@ for name in sel:
 nat = cum.sum(0); nat.index = [pd.Period(m, 'M').to_timestamp() for m in nat.index]
 plt.plot(nat.index, nat.values / 1e6, 'k--', lw=1.6, label='US total')
 plt.axvline(pd.Timestamp('2021-06-01'), color='grey', ls=':', lw=1)
-plt.text(pd.Timestamp('2021-05-15'), plt.ylim()[1] * 0.55, 'Delta wave\nstarts', fontsize=9, color='grey')
+plt.text(pd.Timestamp('2021-05-15'), plt.ylim()[1] * 0.55, 'Delta wave\\nstarts', fontsize=9, color='grey')
 plt.ylabel('fully vaccinated (millions)')
 plt.title('US vaccination rollout (real CDC data)')
 plt.legend(fontsize=8); plt.grid(alpha=0.3)
@@ -344,7 +344,9 @@ changed**: after the peak, people were more careful, isolated more, and
 wore masks more.
 
 The simplest way to express this is a **two-regime transmission rate**
-(formula sheet §7):
+(formula sheet §7) — a standard *piecewise-β* technique (the covariate-driven
+variant, where $g(t)$ is built from mobility or policy indices, was used
+widely in 2020, e.g. Flaxman et al., Nature 2020):
 
 $$\beta_i(t) = \\beta_{0,i}\cdot g(t),\\qquad
 g(t) = \\begin{cases} 1 & \\text{before the peak}\\\\ \\rho & \\text{after the peak}\\end{cases}$$
@@ -418,7 +420,6 @@ for code in JURISDICTIONS:
     I0[code] = i0 / pi0
     E0[code] = I0[code] * (rs[code] + gamma) / sigma
 
-grid_m = [f'{y:04d}-{m:02d}' for y, m in [(2020, 1)] and [(2020, 1)]] or []
 vax2 = pd.read_csv('../data/cdc_vax_state_monthly.csv')
 gidx = [f'{y:04d}-{m:02d}' for y in range(2020, 2024) for m in range(1, 13)][:39]
 pv = vax2.pivot_table(index='state', columns='month', values='series_complete_flow') \\
