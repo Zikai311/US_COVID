@@ -36,7 +36,9 @@ W_{ij}^{\text{gravity}} \propto \frac{N_j^{b_N}}{d_{ij}^{b_d}}\ \text{(row-norma
 | §8.10 | peak timing |
 | §8.11 | discussion & limitations |
 | §8.12 | mobility sensitivity: saturated per-pair weights |
-| §8.13 | time-varying β(t) — NPI/behaviour channel |"""))
+| §8.13 | time-varying β(t) — NPI/behaviour channel |
+| §8.14 | SEIRV: vaccination depletes the susceptible pool |
+| §8.15 | model summary & how to reproduce |"""))
 
 cells.append(code("""import sys, os, time, warnings
 import numpy as np
@@ -101,8 +103,8 @@ print('NYT names not mapped to codes:',
 nat = us.groupby('date')[['new_cases', 'new_cases_smooth']].sum().reset_index()
 fig, ax = plt.subplots(figsize=(9, 4))
 ax.plot(nat.date, nat.new_cases_smooth, lw=1.2, color='#333')
-ax.axvspan(pd.Timestamp('2020-03-01'), pd.Timestamp('2020-06-30'),
-           color='C3', alpha=0.15, label='wave-1 window (modelled)')
+ax.axvspan(pd.Timestamp('2021-06-01'), pd.Timestamp('2021-10-31'),
+           color='C3', alpha=0.15, label='Delta wave-4 window (modelled)')
 ax.set_title('US daily new cases (NYT, 7-day smoothed)')
 ax.set_ylabel('new cases / day')
 ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
@@ -176,29 +178,26 @@ show_fig(f'{ASSETS}/fig62_state_mobility.png')"""))
 
 cells.append(md(r"""## §8.4 Gravity kernel — PPML exponent fit + validation
 
-The validation (`scripts/gravity_validation.py`) showed the classic
-$\sqrt{N_iN_j}/d^2$ kernel is a weak predictor of the BTS directional
-structure (pooled outbound-share Pearson 0.35, Spearman 0.46). We therefore
-fit the kernel exponents from the full panel (formulae_sheet §6 decision 6):
+The mobility direction shares come from the **data-calibrated kernel**
+(formulae_sheet §6 decision 6): exponents estimated on the full BTS panel
+via PPML (Poisson pseudo-ML, origin + month fixed effects — robust to the
+Jensen bias of log-linear OLS):
 
 $$\log F_{ijt} = \\alpha_i + \\gamma_t + b_N\\log N_j + b_d\\log d_{ij} + \\varepsilon$$
 
-with PPML (Poisson pseudo-ML, robust to the Jensen bias of log-linear OLS)."""))
+The calibrated kernel explains the directional structure moderately
+(pooled outbound-share Pearson ≈ 0.45, Spearman ≈ 0.58; appendix A §A.4)."""))
 cells.append(code("""D = build_distance_matrix(JURISDICTIONS)
 Npop = np.array([CENSUS_POPULATIONS[c] for c in JURISDICTIONS], dtype=float)
 
-r_ols  = fit_gravity_exponents(F, D, Npop, method='ols')
 r_ppml = fit_gravity_exponents(F, D, Npop, method='ppml')
-print('OLS : b_d = %+.3f +- %.3f | b_N = %+.3f +- %.3f | R2 = %.3f'
-      % (r_ols['b_d'], r_ols['se_d'], r_ols['b_N'], r_ols['se_N'], r_ols['r2']))
 print('PPML: b_d = %+.3f | b_N = %+.3f | deviance R2 = %.3f | converged = %s'
       % (r_ppml['b_d'], r_ppml['b_N'], r_ppml['r2'], r_ppml['converged']))
 b_N, b_d = r_ppml['b_N'], -r_ppml['b_d']   # positive distance exponent
 
-W_classic = build_gravity_kernel(JURISDICTIONS)
 W_cal = build_gravity_kernel(JURISDICTIONS, b_N=b_N, b_d=b_d)
 
-# pooled outbound-share correlation, classic vs calibrated
+# pooled outbound-share correlation (calibrated kernel only)
 def pooled_share_corr(Wk):
     x, y = [], []
     for i in np.where(out[:, 0] > 0)[0]:
@@ -210,23 +209,20 @@ def pooled_share_corr(Wk):
     x, y = np.array(x), np.array(y)
     return pearsonr(x, y)[0], spearmanr(x, y)[0]
 
-for lab, Wk in (('classic sqrt(NiNj)/d^2', W_classic), (f'calibrated N_j^{b_N:.2f}/d^{b_d:.2f}', W_cal)):
-    rp, rs = pooled_share_corr(Wk)
-    print(f'{lab:<34} pooled share Pearson = {rp:.4f} | Spearman = {rs:.4f}')
+rp, rs = pooled_share_corr(W_cal)
+print(f'calibrated N_j^{b_N:.2f}/d^{b_d:.2f}   pooled share Pearson = {rp:.4f} | Spearman = {rs:.4f}')
 
-fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
-for axx, Wk, lab in zip(axes, (W_classic, W_cal),
-                        ('classic $\\sqrt{N_iN_j}/d^2$',
-                         f'calibrated $N_j^{{{b_N:.2f}}}/d^{{{b_d:.2f}}}$')):
-    x, y = [], []
-    for i in np.where(out[:, 0] > 0)[0]:
-        o = F[i, :, 0]
-        x += list(Wk[i]); y += list(o / o.sum())
-    x, y = np.array(x), np.array(y)
-    axx.scatter(np.log(x), np.log(y), s=4, alpha=0.45, color='C2')
-    axx.set_title(f'{lab}\\nPearson(log) = {pearsonr(np.log(x), np.log(y))[0]:.3f}', fontsize=10)
-    axx.set_xlabel('log predicted outbound share')
-    axx.set_ylabel('log observed outbound share (Jan-2020)')
+fig, ax = plt.subplots(figsize=(6, 5))
+x, y = [], []
+for i in np.where(out[:, 0] > 0)[0]:
+    o = F[i, :, 0]
+    x += list(W_cal[i]); y += list(o / o.sum())
+x, y = np.array(x), np.array(y)
+ax.scatter(np.log(x), np.log(y), s=4, alpha=0.45, color='C2')
+ax.set_title(f'calibrated $N_j^{{{b_N:.2f}}}/d^{{{b_d:.2f}}}$\\n'
+             f'Pearson(log) = {pearsonr(np.log(x), np.log(y))[0]:.3f}', fontsize=10)
+ax.set_xlabel('log predicted outbound share')
+ax.set_ylabel('log observed outbound share (Jan-2020)')
 plt.tight_layout(); plt.savefig(f'{ASSETS}/fig63_kernel_validation.png'); plt.show()
 show_fig(f'{ASSETS}/fig63_kernel_validation.png')"""))
 
@@ -342,7 +338,10 @@ cells.append(md(r"""## §8.7 Simulation
 ~45k ODEs, solved with RK45 over days 517→669 (2021-06-01 → 2021-10-31).
 Mobility matrix $W_{ij}(t) = s_i(t)\mu_{0,i}W_{ij}^{\\text{gravity}}$ is a
 monthly step function; coupling uses the non-symmetric two-term form
-(inflow $W_{ji}$, outflow $W_{ij}$, per degree class, population-conserving)."""))
+(inflow $W_{ji}$, outflow $W_{ij}$, per degree class, population-conserving).
+
+This is the **baseline** (constant-β, no vaccination) run; §8.14 upgrades
+it to the 5-compartment SEIRV (55,440 ODEs) with the CDC vaccination data."""))
 cells.append(code("""s_func = s_interpolator(s, months)
 model = FusedMetapopulationSEIR(
     JURISDICTIONS, CENSUS_POPULATIONS, W_cal, mu0, s_func,
@@ -371,12 +370,11 @@ $\hat\pi = \sum\text{model}/\sum\text{observed}$ and compare *shapes*.
 
 **Honest reading of $\hat\pi$.** With the Jul–Aug β calibration (median
 R₀ ≈ 1.9 — an *effective* value, already depressed by 2021 vaccination),
-the constant-β model now **over-infects**: π̂ ≈ 3.4 (vs 0.36 under the
-June-window fit, §8.8 earlier runs). It has no decline mechanism: the peak
-sits at 2021-10-02, while the real Delta wave peaked **2021-09-10**
-(~176k reported/d) and waned ~60 % by October. §8.14 shows that adding the
-vaccination channel — the missing susceptible depletion — is what brings
-both the level and the decline back."""))
+the constant-β model **over-infects**: π̂ ≈ 3.4. It has no decline
+mechanism: the peak sits at 2021-10-02, while the real Delta wave peaked
+**2021-09-10** (~176k reported/d) and waned ~60 % by October. §8.14 shows
+that adding the vaccination channel — the missing susceptible depletion —
+is what brings both the level and the decline back."""))
 cells.append(code("""new_inf = model.daily_new_infections()      # (n, T) true new infections
 nat_model = new_inf.sum(0)
 nat_obs_all = us.groupby('date')['new_cases_smooth'].sum()
@@ -847,6 +845,40 @@ cells.append(md(r"""### §8.14 honest reading
 - **The story of the Delta window is now closed-loop**: β from the observed
   Jul–Aug growth × real CDC vaccination flows → correct size, correct peak
   timing, correct post-peak decline."""))
+cells.append(md(r"""## §8.15 Model summary & how to reproduce
+
+**Final model stack (wave 4, Delta 2021)**
+
+1. **Network**: 56 jurisdictions, degree-class SEIR, $P(k)\propto k^{-\alpha}e^{-k/k_c}$,
+   ⟨k⟩ = 6 (α = 2.659), 198 classes (§8.2).
+2. **Mobility**: temporally calibrated gravity
+   $W_{ij}(t) = s_i(t)\mu_{0,i}N_j^{b_N}/d_{ij}^{b_d}$ (PPML: b_N ≈ 1.00,
+   b_d ≈ 0.55; Jan-2020 baseline, intra-state self-flows excluded) (§8.3–8.4).
+3. **Transmission**: per-state β from the Jul–Aug 2021 growth slopes
+   (median R₀ ≈ 1.9, cap 6); θ = infectious-stub fraction (§8.5).
+4. **Immunity (SEIRV)**: fifth compartment V fed by the real CDC
+   fully-vaccinated flows, efficacy ε = 1.0 (fit), V₀ from cumulative
+   coverage at 2021-06-01 (§8.14). 55,440 ODEs, RK45, global conservation.
+
+**Key numbers (Delta window, 2021-06-01 → 2021-10-31)**
+
+| Metric | constant-β | SEIRV (final) |
+|---|---|---|
+| π̂ (model/observed total) | 3.37 | **1.67** |
+| R²(log) | −0.29 | **+0.49** |
+| R²(linear) | −0.21 | **+0.36** |
+| national peak | 2021-10-02 (window edge) | **2021-09-24** (observed 09-10) |
+| Oct-end / peak ratio | 1.00 (no decline) | 0.67 (observed 0.41) |
+
+**How to reproduce**: `venv/bin/python scripts/build_nb08.py` regenerates
+this notebook; `scripts/fetch_*.py` re-download every data source (BTS
+T-100, TSA, FHWA VMT, Google CMR, OxCGRT, CDC vaccination); all figures
+land in `assets/` (fig59–fig67, fig75–fig77).
+
+**Open items (documented)**: joint β–ε fitting; waning immunity (w > 0)
+for 2022 waves; per-state onset heterogeneity (ρ ≈ 0.19); multimodal
+mobility (air + car) for s_i(t); pair-level mobility as a sensitivity
+reference (§8.12)."""))
 cells.append(code("""print('notebook 08 rebuild complete | figures fig59..fig67 + fig75, fig76, fig77 -> assets/')"""))
 
 nb['cells'] = cells
