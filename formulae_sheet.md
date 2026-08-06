@@ -35,9 +35,27 @@ R₀>1 也衰减(2026-08-06 notebook-08 修复的 bug)。
 ## 4. Inter-state coupling — temporal gravity
 
 $$W_{ij}(t) = s_i(t)\cdot\mu_{0,i}\cdot W_{ij}^{\text{grav}} \qquad \text{[travellers/day]}$$
-$$W_{ij}^{\text{grav}} \propto \frac{N_i^{\eta}\, N_j^{b_N}}{d_{ij}^{b_d}},\quad
-\sum_j W^{\text{grav}}_{ij}=1$$
-- $b_N = 1.003$、$b_d = 0.546$(PPML 校准);$\eta = 0.5$ 行归一后无关;d ≥ 100 km;对角=0
+
+**完整形式(含起点项,行归一化):**
+
+$$W_{ij}^{\text{grav}} = \frac{N_i^{\eta}\, N_j^{b_N}\,/\,d_{ij}^{b_d}}
+{\sum_{j'} N_i^{\eta}\, N_{j'}^{b_N}\,/\,d_{ij'}^{b_d}},
+\qquad \sum_j W^{\text{grav}}_{ij}=1$$
+
+**起点项为什么被消掉(推导):** 令 $f_{ij}=N_j^{b_N}/d_{ij}^{b_d}$(仅依赖目的地),则
+
+$$W_{ij}^{\text{grav}}
+= \frac{N_i^{\eta}\, f_{ij}}{\sum_{j'} N_i^{\eta}\, f_{ij'}}
+= \frac{N_i^{\eta}}{N_i^{\eta}}\cdot\frac{f_{ij}}{\sum_{j'} f_{ij'}}
+= \frac{N_j^{b_N}/d_{ij}^{b_d}}{\sum_{j'} N_{j'}^{b_N}/d_{ij'}^{b_d}}$$
+
+即**任何只依赖起点 $i$ 的因子(如 $N_i^\eta$、乃至任意 $\phi(i)$)在行归一化下精确约分**;
+$W^{\text{grav}}$ 只保留目的地人口弹性与距离衰减,等价简化式
+$W_{ij}^{\text{grav}} \propto N_j^{b_N}/d_{ij}^{b_d}$。起点"质量"的作用改由
+$\mu_{0,i}$(基准出流量,∝ $N_i$)承担;PPML 回归中起点特征被固定效应
+$\alpha_i$ 吸收($b_N$ 是纯目的地弹性)。
+
+- $b_N = 1.003$、$b_d = 0.546$(PPML 校准);$\eta = 0.5$(习惯写法,约分后无关);d ≥ 100 km;对角=0
 - $\mu_{0,i} = \dfrac{\sum_{j\ne i}F_{ij}(\text{Jan-2020})}{T_{\text{mo}}}$(每州 Jan-2020 日出流量)
 - $s_i(t) = \dfrac{\sum_{j\ne i}F_{ij}(t)}{\sum_{j\ne i}F_{ij}(\text{Jan-2020})}$(每月移动比例,纯航空)
 - 自洽:$\sum_j W_{ij}(t)$ = 观测日出流量(州内自环排除;无 Jan 基线 ⇒ μ₀=0,s≡0)
