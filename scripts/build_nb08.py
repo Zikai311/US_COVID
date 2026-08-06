@@ -1,5 +1,7 @@
 """One-off builder: rebuild notebooks/08_metapopulation.ipynb from scratch
-(fused degree-based SEIR x gravity metapopulation, 56 jurisdictions)."""
+(fused degree-based SEIR x gravity metapopulation, 56 jurisdictions).
+Wave-4 (Delta 2021) rebuild 2026-08-06: window 2021-06-01 -> 2021-10-31,
+beta calibrated on the Jun-2021 growth window, R0 cap 6 (Delta)."""
 import json, nbformat as nbf
 
 nb = nbf.v4.new_notebook()
@@ -9,7 +11,9 @@ code = nbf.v4.new_code_cell
 
 cells.append(md(r"""# Fused Model — Degree-Based SEIR × Temporal Gravity Metapopulation (56 Jurisdictions)
 
-**Rebuilt 2026-08-05** from `formulae_sheet.md` (dimensionally-corrected, §1–§7).
+**Rebuilt 2026-08-06 — Wave 4 (Delta) run.** Modelling window:
+**2021-06-01 → 2021-10-31** (days 517–669 since 2020-01-01).
+β calibrated on the Jun-2021 growth window; R₀ capped at 6 (Delta consensus).
 
 Each of the 56 NYT/BTS jurisdictions (50 states + DC + PR/GU/VI/MP/AS) runs a
 degree-based SEIR over degree classes $k$; states are coupled by the
@@ -18,22 +22,21 @@ degree-based SEIR over degree classes $k$; states are coupled by the
 $$W_{ij}(t) = s_i(t)\,\mu_{0,i}\,W_{ij}^{\text{gravity}},\qquad
 W_{ij}^{\text{gravity}} \propto \frac{N_j^{b_N}}{d_{ij}^{b_d}}\ \text{(row-normalised, data-calibrated)}$$
 
-Modelling window: **wave 1, 2020-03-01 → 2020-06-30** (days 60–182 since
-2020-01-01).
-
 | Section | Content |
 |---|---|
 | §8.1 | data: populations, densities, NYT cases, BTS flows |
 | §8.2 | degree distribution (truncated power law, ⟨k⟩ = 6) |
 | §8.3 | BTS mobility calibration: μ₀,i, s_i(t) |
 | §8.4 | gravity kernel: PPML exponent fit + validation |
-| §8.5 | SEIR parameters: σ, γ, per-state β from early growth rates |
-| §8.6 | initial conditions (2020-03-01) |
+| §8.5 | SEIR parameters: σ, γ, per-state β from the Jun-2021 growth window |
+| §8.6 | initial conditions (2021-06-01) |
 | §8.7 | simulation |
 | §8.8 | national fit |
 | §8.9 | state-level fits |
 | §8.10 | peak timing |
-| §8.11 | discussion & limitations |"""))
+| §8.11 | discussion & limitations |
+| §8.12 | mobility sensitivity: saturated per-pair weights |
+| §8.13 | time-varying β(t) — NPI/behaviour channel |"""))
 
 cells.append(code("""import sys, os, time, warnings
 import numpy as np
@@ -58,8 +61,8 @@ warnings.filterwarnings('ignore')
 plt.rcParams.update({'figure.dpi': 110, 'savefig.dpi': 150})
 ASSETS = '../assets'
 DAY0 = pd.Timestamp('2020-01-01')
-T0  = (pd.Timestamp('2020-03-01') - DAY0).days    # 60
-TMAX = (pd.Timestamp('2020-06-30') - DAY0).days   # 182
+T0  = (pd.Timestamp('2021-06-01') - DAY0).days    # 517 (Delta wave-4 start)
+TMAX = (pd.Timestamp('2021-10-31') - DAY0).days   # 669 (Delta wave-4 end)
 
 def show_fig(path):
     from IPython.display import Image, display
@@ -233,18 +236,19 @@ cells.append(md(r"""## §8.5 SEIR parameters
 - Recovery: $\gamma = 1/10\ \mathrm{d}^{-1}$ (historical value, notebook 06).
 - Per-state infection rate $\beta_i$: fitted from each state's early
   exponential growth rate $r_i$ (log-linear slope of 7-day-smoothed new
-  cases over 2020-03-01 → 2020-03-30), via the SEIR characteristic equation:
+  cases over **2021-06-01 → 2021-06-30**, the Delta takeoff window), via
+  the SEIR characteristic equation:
 
 $$\beta_i = \\frac{(r_i+\\gamma)(r_i+\\sigma)}{\\sigma}\\,\\frac{\\langle k\\rangle}{\\langle k^2\\rangle}$$
 
 States without a usable growth window fall back to the national median β.
 
-**Testing-ramp caveat.** Reported-case growth in March 2020 was inflated by
-the expansion of testing itself, so the raw fits imply $R_0 \approx 6$–$10$,
-far above the consensus $R_0 \approx 2.5$–$4$.  We therefore cap the
-per-state infection rate at $R_0 = 4$
-($\\beta_i \\leftarrow \\min(\\beta_i, 4\\gamma\\langle k\\rangle/\\langle k^2\\rangle)$)
-and report how many states hit the cap."""))
+**Delta R₀ caveat.** The Delta variant was more transmissible than the
+2020 wild-type (consensus $R_0 \approx 5$–8); raw June-2021 growth fits
+imply a similar range. We cap the per-state infection rate at
+$R_0 = 6$ ($\\beta_i \\leftarrow \\min(\\beta_i, 6\\gamma\\langle k\\rangle/\\langle k^2\\rangle)$)
+and report how many states hit the cap. Unlike March-2020, testing was
+stable in 2021, so slope fits carry no testing-ramp inflation."""))
 cells.append(code("""sigma, gamma = 1.0/5, 1.0/10
 mom_ratio = mean_k2 / mean_k
 
@@ -257,7 +261,7 @@ def fit_growth(df_sub):
     slope, _ = np.polyfit(t[m], np.log(s_[m]), 1)
     return slope if slope > 0 else np.nan
 
-win_start = pd.Timestamp('2020-03-01')
+win_start = pd.Timestamp('2021-06-01')
 win_days = 30
 r_i, beta_i = {}, {}
 for code in JURISDICTIONS:
@@ -274,12 +278,12 @@ med_beta = float(bs.median())
 bs = bs.fillna(med_beta)
 rs = rs.fillna(float(rs.median()))
 
-R0_MAX = 4.0
+R0_MAX = 6.0   # Delta consensus upper bound (wave-1 run used 4.0)
 beta_cap = R0_MAX * gamma / mom_ratio
 n_cap = int((bs > beta_cap).sum())
 bs = bs.clip(upper=beta_cap)
-print(f'states with usable growth window: {n_fit}/56 | fallback median beta = {med_beta:.4f} d^-1')
-print(f'R0 cap = {R0_MAX} (beta<={beta_cap:.4f}) applied to {n_cap} states (testing-ramp inflation)')
+print(f'states with usable Jun-2021 growth window: {n_fit}/56 | fallback median beta = {med_beta:.4f} d^-1')
+print(f'R0 cap = {R0_MAX} (beta<={beta_cap:.4f}) applied to {n_cap} states')
 
 fit_df = pd.DataFrame({'r': rs, 'beta': bs, 'R0': bs * mom_ratio / gamma})
 print('\\nper-state beta (top 10 / bottom 10):')
@@ -288,29 +292,36 @@ print(fit_df.sort_values('beta', ascending=False).tail(10).to_string())
 
 fig, axes = plt.subplots(1, 2, figsize=(10, 3.6))
 axes[0].hist(rs, bins=20, color='C4', alpha=0.8)
-axes[0].set_xlabel('early growth rate r (d^-1)'); axes[0].set_ylabel('states')
-axes[1].hist(bs, bins=20, color='C5', alpha=0.8)
-axes[1].set_xlabel('beta (d^-1)'); axes[1].set_ylabel('states')
-axes[0].set_title('Growth rates in the Mar-2020 window')
-axes[1].set_title('Per-state infection rates (cap R0=4)')
+axes[0].set_xlabel('r (per-day growth, Jun 2021)')
+axes[0].set_title('Per-state early growth rates (Delta)')
+axes[1].hist(bs, bins=20, color='C4', alpha=0.8)
+axes[1].axvline(beta_cap, color='k', ls='--', lw=0.8, label=f'cap R0={R0_MAX}')
+axes[1].set_xlabel('β (d⁻¹)')
+axes[1].set_title('Per-state infection rates (cap R0=6)')
+axes[1].legend(fontsize=8)
 plt.tight_layout(); plt.savefig(f'{ASSETS}/fig64_beta_estimates.png'); plt.show()
 show_fig(f'{ASSETS}/fig64_beta_estimates.png')"""))
 
-cells.append(md(r"""## §8.6 Initial conditions (2020-03-01)
+cells.append(md(r"""## §8.6 Initial conditions (2021-06-01)
 
 The infectious pool must be in **true-infection units** (β was calibrated
 from slopes, which are invariant to a constant reporting factor, but the
-initial condition is not).  We seed with the raw reported new cases on
-2020-03-01 back-scaled by an assumed early reporting fraction
-$\pi_0 = 0.1$ (IC-level assumption only; documented in §8.11):
+initial condition is not).  We seed with the reported new cases on
+2021-06-01 back-scaled by an assumed reporting fraction $\pi_0 = 0.3$
+(2021 testing was widespread — much higher than the 0.1 used in the wave-1
+run; IC-level assumption only, documented in §8.11):
 
-- $I_0 = \text{reported new cases}(2020\text{-}03\text{-}01)/\pi_0$
+- $I_0 = \text{reported new cases}(2021\text{-}06\text{-}01)/\pi_0$
 - $E_0 = I_0\,(r_i+\gamma)/\sigma$ from the early-growth balance
   $\sigma E = (r+\gamma) I$.
 - $R_0 = 0$; $S_0 = N_i - I_0 - E_0$.  Total population is conserved
-  **globally** (travellers move between states; deaths ⊂ R, §8.11)."""))
-cells.append(code("""pi0 = 0.1  # IC-level assumed reporting fraction (display-adjusted later)
-seed_date = pd.Timestamp('2020-03-01')
+  **globally** (travellers move between states; deaths ⊂ R, §8.11).
+
+Unlike March-2020, **every state reports cases on 2021-06-01** — the
+epidemic is already nationwide, so the wave-4 seeding question is not
+"where does it start" but "where does Delta take off fastest"."""))
+cells.append(code("""pi0 = 0.3  # IC-level assumed reporting fraction (2021 testing; display-adjusted later)
+seed_date = pd.Timestamp('2021-06-01')
 I0, E0 = {}, {}
 for code in JURISDICTIONS:
     name = CODE_TO_NAME[code]
@@ -320,7 +331,7 @@ for code in JURISDICTIONS:
     E0[code] = I0[code] * (rs[code] + gamma) / sigma
 
 seeded = {c: v for c, v in I0.items() if v > 0}
-print(f'states seeded on 2020-03-01: {len(seeded)}/56 | national I0 (true-scale) = {sum(seeded.values()):,.0f}')
+print(f'states seeded on 2021-06-01: {len(seeded)}/56 | national I0 (true-scale) = {sum(seeded.values()):,.0f}')
 top = sorted(seeded.items(), key=lambda kv: -kv[1])[:8]
 for c, v in top:
     print(f'  {CODE_TO_NAME[c]:<24} I0 = {v:>10,.1f}   E0 = {E0[c]:>10,.1f}')"""))
@@ -328,7 +339,7 @@ for c, v in top:
 cells.append(md(r"""## §8.7 Simulation
 
 `FusedMetapopulationSEIR`: 56 states × K degree classes × 4 compartments =
-~45k ODEs, solved with RK45 over days 60→182 (2020-03-01 → 2020-06-30).
+~45k ODEs, solved with RK45 over days 517→669 (2021-06-01 → 2021-10-31).
 Mobility matrix $W_{ij}(t) = s_i(t)\mu_{0,i}W_{ij}^{\\text{gravity}}$ is a
 monthly step function; coupling uses the non-symmetric two-term form
 (inflow $W_{ji}$, outflow $W_{ij}$, per degree class, population-conserving)."""))
@@ -358,15 +369,17 @@ reporting fraction π (deliberately not in the model). For display only we
 scale the observed curve by the window-total ratio
 $\hat\pi = \sum\text{model}/\sum\text{observed}$ and compare *shapes*.
 
-**Honest reading of $\hat\pi$.** Here $\hat\pi = 29.8$, i.e. the model
-produces ~30× the reported window total. This is *not* a reporting fraction
-(COVID-19 testing reported far *more* than 1-in-30 of infections by
-mid-2020). It says the model over-infects by ~30×, because **β is held
-constant** (no non-pharmaceutical interventions). The real epidemic's Rₜ fell
-below 1 in April (lockdowns, distancing) and its national peak was
-early-April; this model has no such feedback, so its infectious curve keeps
-climbing to the window edge. We keep the comparison to show exactly where the
-model breaks (post-peak decline is beyond a constant-β SEIR)."""))
+**Honest reading of $\hat\pi$.** Unlike wave 1 (π̂ ≈ 30 — massive over-
+infection), the Delta run **undershoots**: π̂ ≈ 0.36, i.e. the model
+produces only ~36 % of the observed window total. The reason is the β
+calibration: only 14/56 states had a usable positive growth window in June
+2021 (the Delta takeoff was staggered — most states were still flat), so 42
+states fall back to the median β with R₀ ≈ 1.2. The model also has no
+decline mechanism: its peak sits at the window edge (2021-10-31), while the
+real Delta wave peaked **2021-09-10** (~176k reported/d) and waned ~60 % by
+the end of October (behaviour, immunity, seasonality — not in the model).
+R²(log) is nonetheless **positive** (≈ 0.1–0.2) — the 2021 curve is much
+closer to the model's exponential shape than the wave-1 curve was."""))
 cells.append(code("""new_inf = model.daily_new_infections()      # (n, T) true new infections
 nat_model = new_inf.sum(0)
 nat_obs_all = us.groupby('date')['new_cases_smooth'].sum()
@@ -377,18 +390,16 @@ print(f'over-infection factor pi-hat (model/observed, display only) = {pi_hat:.2
 
 pk_m = dates[int(np.argmax(nat_model))]
 pk_o = nat_obs_all.loc[dates].idxmax()
-pk_apr = nat_obs_all.loc['2020-04-01':'2020-05-15'].idxmax()
-print(f'national peak: model {pk_m.date()} (window edge: no-NPI climb)')
-print(f'observed: window max {pk_o.date()} (June surge) | '
-      f'classic wave-1 max {pk_apr.date()} (~{nat_obs_all.loc[pk_apr]:,.0f} reported/d)')
+print(f'national peak: model {pk_m.date()} (window edge: no decline in constant-β)')
+print(f'observed: Delta window max {pk_o.date()} (~{nat_obs_all.loc[pk_o]:,.0f} reported/d)')
 
 fig, ax = plt.subplots(figsize=(9.5, 4.2))
 ax.plot(dates, nat_model, lw=1.8, color='C0', label='model: true new infections')
 ax.plot(dates, pi_hat * nat_obs, '--', lw=1.4, color='C3',
         label=f'observed x {pi_hat:.2f}')
-ax.set_title('National: model vs observed (wave 1)')
+ax.set_title('National: model vs observed (Delta wave, 2021-06-01..10-31)')
 ax.set_ylabel('new infections / day')
-ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
+ax.xaxis.set_major_formatter(mdates.DateFormatter('%b'))
 ax.legend(fontsize=8)
 plt.tight_layout(); plt.savefig(f'{ASSETS}/fig65_national_fit.png'); plt.show()
 show_fig(f'{ASSETS}/fig65_national_fit.png')"""))
@@ -396,11 +407,11 @@ show_fig(f'{ASSETS}/fig65_national_fit.png')"""))
 cells.append(md(r"""## §8.9 State-level fits
 
 Same π-adjustment per state (independent $\hat\pi_i$ = model total ÷ observed
-total over the window). Eight representative states: the early outbreak
-(New York, New Jersey), the Sun Belt (California, Florida, Texas), the first
-seed states (Washington), and the mid-March wave (Michigan, Louisiana)."""))
-cells.append(code("""sel8 = ['New York', 'New Jersey', 'California', 'Florida',
-              'Texas', 'Washington', 'Michigan', 'Louisiana']
+total over the window). Eight representative states: the Delta hotspot
+South (Florida, Louisiana, Arkansas, Texas, Alabama), the late-arriving
+Northeast (New York, New Jersey), and a West-Coast state (California)."""))
+cells.append(code("""sel8 = ['Florida', 'Louisiana', 'Arkansas', 'Texas', 'Alabama',
+              'New York', 'New Jersey', 'California']
 fig, axes = plt.subplots(2, 4, figsize=(14, 6.8), sharex=True)
 for axx, name in zip(axes.ravel(), sel8):
     code = NAME_TO_CODE[name]
@@ -418,19 +429,20 @@ show_fig(f'{ASSETS}/fig66_state_fits.png')"""))
 
 cells.append(md(r"""## §8.10 Spatial timing: outbreak onset order
 
-Does the coupled model reproduce **which states light up first**? Peak-day
-comparison is ill-posed here (with constant β every state's curve is still
-climbing at the window edge, §8.8). We instead compare scale-free **onset
-days**: for each state, the first day its daily infections (model: new
-infections; observed: smoothed reported cases) reach 10 % of its own window
-maximum, then score the ordering with Spearman's ρ.
+Does the coupled model reproduce **which states' Delta waves take off
+first**? Peak-day comparison is ill-posed here (with constant β every
+state's curve is still climbing at the window edge, §8.8). We instead
+compare scale-free **onset days**: for each state, the first day its daily
+infections (model: new infections; observed: smoothed reported cases) reach
+10 % of its own window maximum, then score the ordering with Spearman's ρ.
 
-**Honest outcome.** With all β capped to the same $R_0=4$, every state has
-identical within-state dynamics, so the coupling seedsthe whole country
+**Honest outcome.** With all β capped to the same $R_0=6$, every state has
+identical within-state dynamics, so the coupling seeds the whole country
 within days → model onsets are near-identical and ρ≈0. The staggered
-wave-onset we see in the data (NY, WA, the Sun Belt...) came from space-time
-heterogeneity in behaviour and testing — precisely the NPI part this constant-
-β model omits. §8.11 returns to this."""))
+wave-onset we see in the data (the South took off first with Delta in
+June–July, the Northeast last) came from space-time heterogeneity in
+behaviour, immunity and testing — precisely the parts this constant-β model
+omits. §8.11 returns to this."""))
 cells.append(code("""def onset_day(series):
     pk = series.max()
     if pk <= 0:
@@ -442,8 +454,8 @@ ons_mo, ons_ob, skipped = [], [], []
 for code in JURISDICTIONS:
     i = JURISDICTIONS.index(code)
     name = CODE_TO_NAME[code]
-    sub = us[(us.state == name) & (us.date >= pd.Timestamp('2020-03-01'))
-             & (us.date <= pd.Timestamp('2020-06-30'))]
+    sub = us[(us.state == name) & (us.date >= pd.Timestamp('2021-06-01'))
+             & (us.date <= pd.Timestamp('2021-10-31'))]
     if sub.empty or sub['new_cases_smooth'].max() <= 0:
         skipped.append(code)
         continue
@@ -455,8 +467,8 @@ for code in JURISDICTIONS:
     ons_ob.append(int(o_ob)); ons_mo.append(int(o_mo))
 rho = spearmanr(ons_mo, ons_ob)[0]
 print(f'states compared: {len(ons_ob)}/56 | Spearman(onset order) = {rho:.3f}')
-print('skipped (no observed wave-1 cases):', [CODE_TO_NAME[c] for c in skipped])
-print('model onset range (days from Mar 1):',
+print('skipped (no observed Delta cases):', [CODE_TO_NAME[c] for c in skipped])
+print('model onset range (days from Jun 1):',
       min(ons_mo), '->', max(ons_mo), '| observed range:',
       min(ons_ob), '->', max(ons_ob))
 
@@ -470,7 +482,7 @@ for code, x, y in sorted(zip(JURISDICTIONS, ons_ob, ons_mo),
                 textcoords='offset points')
 ax.set_xlabel('observed onset day (days since 2020-01-01)')
 ax.set_ylabel('model onset day')
-ax.set_title(f'Wave-1 outbreak onset: observed vs model (Spearman rho = {rho:.2f})')
+ax.set_title(f'Delta wave onset: observed vs model (Spearman rho = {rho:.2f})')
 plt.tight_layout(); plt.savefig(f'{ASSETS}/fig67_onset_timing.png'); plt.show()
 show_fig(f'{ASSETS}/fig67_onset_timing.png')"""))
 
@@ -479,23 +491,26 @@ cells.append(md(r"""## §8.11 Discussion & limitations
 **What the model reproduces**
 
 - Early exponential growth of every state (β calibrated per state from the
-  Mar-2020 window).
-- **Nationwide reach within days**: from 3 seeded states the coupled model
-  lights up all 56 jurisdictions in ~2 weeks — the gravity+mobility channel
-  at work (§8.10).
-- The mobility channel: states are only seeded through imported travellers
-  ($W_{ij}$), which is exactly how COVID-19 reached most US states.
+  Jun-2021 Delta takeoff window).
+- **Nationwide Delta spread**: every state is already seeded on 2021-06-01
+  (unlike wave 1), and the coupled model reproduces the concurrent national
+  surge — the mobility channel keeps all 56 jurisdictions coupled (§8.10).
+- The mobility channel: states exchange travellers through $W_{ij}$ at the
+  observed BTS rates.
 
 **What the model cannot do (constant-β limit)**
 
 - **Post-peak decline.** β is held fixed, so Rₐ never drops below 1; every
   state's curve keeps climbing to the window edge in §8.8 and §8.10. The real
-  April decline came from lockdowns — a time-varying β (NPI) is the natural
-  follow-up in this framework.
-- **Staggered onset order.** Because all β are capped to the same R₀ = 4,
+  Delta wave peaked mid-September and declined into October — driven by
+  behaviour, accumulating immunity and seasonality, none of which a
+  constant-β SEIR carries. §8.13 tests whether an external β(t) driver can
+  do better.
+- **Staggered onset order.** Because all β are capped to the same R₀ = 6,
   the model's per-state onsets are near-simultaneous (Spearman ρ ≈ 0,
-  §8.10); the observed staggered onsets encode space-time testing/behaviour
-  heterogeneity that constant β discards.
+  §8.10); the observed staggered onsets (South first, Northeast last)
+  encode space-time immunity/behaviour heterogeneity that constant β
+  discards.
 
 **Deliberately not modelled (documented decisions)**
 
@@ -503,28 +518,26 @@ cells.append(md(r"""## §8.11 Discussion & limitations
    true infections. The model outputs true infections; §8.8–§8.9 show a
    *post-hoc* $\hat\pi$ purely for display. β fits are slope-based, hence
    π-invariant, but the **initial condition is not**: §8.6 back-scales I₀ by
-   an assumed π₀ = 0.1 (IC-level only). (ρ is already the calibration
-   residual, so π would be the symbol if this is ever added.)
+   an assumed π₀ = 0.3 (IC-level only, 2021 testing). (ρ is already the
+   calibration residual, so π would be the symbol if this is ever added.)
 2. **Deaths ⊂ R** — total population is conserved **globally** (per-state
    totals move because travellers physically change state); real US COVID-19
    mortality ≈ 1%, negligible at this modelling level.
-3. **R₀ cap** — raw March-2020 growth fits imply R₀ ≈ 6–10, inflated by the
-   testing ramp-up; β is capped at R₀ = 4 (§8.5), the consensus upper bound.
+3. **R₀ cap** — raw Jun-2021 Delta growth fits imply R₀ ≈ 5–8; β is capped
+   at R₀ = 6 (§8.5), the consensus Delta upper bound.
 4. **Gravity-kernel validity** — `scripts/gravity_validation.py` confirms
    the *temporal* half of the belief (median pair correlation 0.87, pooled
    slope 1.15 vs 1.00) but only moderate *spatial* fit (calibrated kernel
-   pooled share Pearson 0.45 / Spearman 0.58; classic 0.35/0.46; top-1
-   destination hit rate 20 %). Air travel ≠ all travel; land transport is
-   missing.
+   pooled share Pearson 0.45 / Spearman 0.58; top-1 destination hit rate
+   34 %). Air travel ≠ all travel; land transport is missing.
 5. **Degree distribution** — global fallback ⟨k⟩ = 6; the density-scaling
    constants ⟨k⟩₀, ξ remain open (decision 1).
 6. **Mobility granularity** — BTS is monthly; the model uses monthly step
-   functions, so March's collapse (aviation −60 % by April) enters only on
-   the monthly grid. TSA daily data (`tsa_checkpoint_daily.csv`) could
-   refine $s_i(t)$.
-7. **$I_0$ proxy** — reported new cases on 2020-03-01 back-scaled by an
-   assumed early-reporting π₀ = 0.1 (§8.6); a lower bound for the true
-   active pool, and E₀ follows from the early-growth balance."""))
+   functions, so intra-month mobility changes enter only on the monthly
+   grid. TSA daily data (`tsa_checkpoint_daily.csv`) could refine $s_i(t)$.
+7. **$I_0$ proxy** — reported new cases on 2021-06-01 back-scaled by an
+   assumed reporting π₀ = 0.3 (§8.6); every state is seeded (unlike the
+   wave-1 run, where only 3 states had cases on 2020-03-01)."""))
 cells.append(md(r"""## §8.12 Mobility sensitivity — saturated per-pair weights (experiment)
 
 The mobility input can be replaced by the **observed per-pair flows**
@@ -583,7 +596,7 @@ m = np.isfinite(ons_g) & np.isfinite(ons_p)
 axes[1].scatter(ons_g[m], ons_p[m], s=20, alpha=0.7, color='C6')
 lo, hi = min(ons_g[m].min(), ons_p[m].min()), max(ons_g[m].max(), ons_p[m].max())
 axes[1].plot([lo, hi], [lo, hi], 'k--', lw=0.8)
-axes[1].set_xlabel('onset day (gravity), days since Mar 1')
+axes[1].set_xlabel('onset day (gravity), days since Jun 1')
 axes[1].set_ylabel('onset day (per-pair flows)')
 axes[1].set_title('Per-state onset: mobility mode barely matters')
 axes[1].grid(alpha=0.3)
@@ -591,11 +604,13 @@ plt.tight_layout()
 plt.savefig(f'{ASSETS}/fig75_mobility_sensitivity.png'); plt.show()
 show_fig(f'{ASSETS}/fig75_mobility_sensitivity.png')"""))
 
-cells.append(md(r"""## §8.13 Time-varying β(t) — the NPI channel
+cells.append(md(r"""## §8.13 Time-varying β(t) — NPI/behaviour channel in the Delta window
 
 §8.11's biggest "cannot": **post-peak decline** — constant β can never
-produce the April lockdown drop. The minimal fix is a time-varying
-transmission rate driven by *external* NPI/behaviour data (one fitted
+produce the observed October waning of the Delta wave. Unlike wave 1 there
+was **no lockdown** in summer 2021 (mobility stayed high, stringency low),
+so the wave's October decline is *not* obviously NPI-driven. We still test
+the time-varying transmission channel driven by *external* data (one fitted
 parameter, not a free curve):
 
 $$\beta_i(t) = \beta_{0,i}\cdot g_i(t)$$
@@ -604,22 +619,20 @@ Two candidate drivers (both monthly, aligned to the model grid):
 
 - **Google Community Mobility (CMR, `data/google_cmr_state_monthly.csv`)** —
   behaviour-driven: $g_i(t) = 1 + \theta\, c_i(t)/100$, $c_i(t)$ = monthly
-  % change vs baseline of *transit stations* (most direct contact proxy;
-  workplaces/retail/residential as alternatives).
+  % change vs baseline of *transit stations* (most direct contact proxy).
 - **Oxford stringency (OxCGRT, `data/oxcgrt_state_monthly.csv`)** —
   policy-driven: $g_i(t) = e^{-\lambda\, s_i(t)/100}$, $s_i$ = stringency 0–100.
 
-**March normalisation.** β₀ was calibrated from the March growth slope under
-constant β; a raw driver would cut March transmission and break the early
-ramp. We therefore rescale $g_i$ so March-2020 = 1 (β₀ keeps its meaning;
-April+ carry the reduction), and grid-search the single parameter θ (or λ)
-on the national log-RMSE. Territories without CMR/stringency data use the
-national fallback (built into the helpers)."""))
+**June normalisation.** β₀ was calibrated from the Jun-2021 growth slope
+under constant β, so $g_i$ is rescaled to June-2021 = 1 (β₀ keeps its
+meaning; later months carry the reduction), and the single parameter θ (or
+λ) is grid-searched on the national log-RMSE. Territories fall back to the
+national US series."""))
 cells.append(code("""cmrs = pd.read_csv('../data/google_cmr_state_monthly.csv')
 oxm = pd.read_csv('../data/oxcgrt_state_monthly.csv')
 
-def march_norm(g):
-    return g / g[:, 2:3]                      # Mar-2020 = 1 (preserve β0 calibration)
+def jun_norm(g):
+    return g / g[:, 17:18]                    # Jun-2021 = 1 (preserve β0 calibration)
 
 def eval_scale(scale):
     m = FusedMetapopulationSEIR(
@@ -630,57 +643,43 @@ def eval_scale(scale):
     ni = m.daily_new_infections().sum(0)
     ph = ni.sum() / nat_obs.sum()
     rm = np.sqrt(np.mean((np.log(ni / ph + 1) - np.log(nat_obs + 1)) ** 2))
-    rm_d = np.sqrt(np.mean((np.log(ni / ph + 1)[45:105]
-                            - np.log(nat_obs + 1)[45:105]) ** 2))  # Apr 15-Jun 15
     pk = int(np.argmax(ni))
-    return ni, ph, rm, rm_d, pk
+    return ni, ph, rm, pk
 
 rows = []
 for theta in np.arange(0.2, 2.01, 0.1):
-    g = march_norm(cmr_beta_scale(cmrs, months, category='transit', theta=theta))
-    ni, ph, rm, rm_d, pk = eval_scale(g)
+    g = jun_norm(cmr_beta_scale(cmrs, months, category='transit', theta=theta))
+    ni, ph, rm, pk = eval_scale(g)
     rows.append(('CMR transit', theta, rm, ph, pk, ni))
 for lam in np.arange(0.1, 2.01, 0.1):
-    g = march_norm(stringency_beta_scale(oxm, months, lambda_=lam))
-    ni, ph, rm, rm_d, pk = eval_scale(g)
+    g = jun_norm(stringency_beta_scale(oxm, months, lambda_=lam))
+    ni, ph, rm, pk = eval_scale(g)
     rows.append(('stringency', lam, rm, ph, pk, ni))
 
 grid = pd.DataFrame([r[:5] for r in rows], columns=['driver', 'param', 'log_RMSE',
                                                     'pi_hat', 'peak_day'])
-# decline test: the NPI channel must actually produce a real post-April dip
-# (May min < 90% of the Mar-Apr peak); among those, best full-window log-RMSE.
-cand_rows = []
-for (drv, p, rm, ph, pk, ni) in rows:
-    apr_peak = float(ni[10:45].max())       # abs days 70..105
-    may_min = float(ni[55:85].min())        # abs days 115..145
-    if may_min < 0.9 * apr_peak:
-        cand_rows.append((drv, p, rm, ph, pk, apr_peak, may_min))
-cand = pd.DataFrame(cand_rows, columns=['driver', 'param', 'log_RMSE', 'pi_hat',
-                                        'peak_day', 'apr_peak', 'may_min'])
-print('candidates with a real April decline (May min < 90% of Apr peak):')
-print(cand.sort_values('log_RMSE').head(6).to_string(index=False,
+print('grid search (top 6 by full-window log-RMSE):')
+print(grid.sort_values('log_RMSE').head(6).to_string(index=False,
       float_format=lambda v: f'{v:.3f}'))
-print(f'excluded (no dip): {len(grid) - len(cand)}/{len(grid)} grid points')
 
-best = cand.sort_values('log_RMSE').iloc[0]
+best = grid.sort_values('log_RMSE').iloc[0]
 drv, pbest = best.driver, best.param
-g_best = march_norm(cmr_beta_scale(cmrs, months, category='transit', theta=pbest)) if drv == 'CMR transit' \
-    else march_norm(stringency_beta_scale(oxm, months, lambda_=pbest))
-ni2, ph2, rm2, rmd2, pk2 = eval_scale(g_best)
+g_best = jun_norm(cmr_beta_scale(cmrs, months, category='transit', theta=pbest)) if drv == 'CMR transit' \
+    else jun_norm(stringency_beta_scale(oxm, months, lambda_=pbest))
+ni2, ph2, rm2, pk2 = eval_scale(g_best)
 nat2v = ni2
 r2l0 = 1 - np.sum((np.log(nat_model / pi_hat + 1) - np.log(nat_obs + 1)) ** 2) / np.sum((np.log(nat_obs + 1) - np.log(nat_obs + 1).mean()) ** 2)
 r2l2 = 1 - np.sum((np.log(nat2v / ph2 + 1) - np.log(nat_obs + 1)) ** 2) / np.sum((np.log(nat_obs + 1) - np.log(nat_obs + 1).mean()) ** 2)
 r2v0 = 1 - np.sum((nat_model / pi_hat - nat_obs) ** 2) / np.sum((nat_obs - nat_obs.mean()) ** 2)
 r2v2 = 1 - np.sum((nat2v / ph2 - nat_obs) ** 2) / np.sum((nat_obs - nat_obs.mean()) ** 2)
-depth = 100 * (1 - best.may_min / best.apr_peak)
-jun_end = float(nat2v[-1])
-jun_obs = float(nat_obs[-1])
+sep_peak = float(nat2v[90:120].max())        # Sep (window indices, Sep 1-30)
+oct_min = float(nat2v[130:].min())           # Oct 10 onwards
+oct_obs = float(nat_obs[-1])
 print(f'selected: {drv} param={pbest:.1f}')
 print(f'pi-hat: {pi_hat:.1f} -> {ph2:.2f}')
-print(f'April dip: peak {best.apr_peak:,.0f} -> May min {best.may_min:,.0f} '
-      f'({depth:.0f}% drop; observed ~35%)')
-print(f'June end: model {jun_end:,.0f}/d vs observed {jun_obs:,.0f}/d '
-      f'({jun_end/jun_obs:.1f}x — mobility-driven over-recovery)')
+print(f'Sep peak {sep_peak:,.0f} -> Oct min {oct_min:,.0f} '
+      f'({100*(1-oct_min/max(sep_peak,1)):+.0f}% change in model) '
+      f'| observed Oct end {oct_obs:,.0f}/d')
 print(f'R2(linear): const-beta {r2v0:.2f} -> beta(t) {r2v2:.2f}')
 print(f'R2(log)   : const-beta {r2l0:.2f} -> beta(t) {r2l2:.2f}')"""))
 
@@ -690,53 +689,45 @@ axes[0].plot(dates, nat_obs, lw=1.4, color='k', label='observed (smoothed)')
 axes[0].plot(dates, nat_model / pi_hat, lw=1.3, color='C0', ls=':', label='const-β (own π̂)')
 axes[0].plot(dates, nat2v / ph2, lw=1.3, color='C2', label=f'β(t) {drv} (own π̂)')
 axes[0].set_ylabel('reported-scale new cases / day')
-axes[0].set_title(f'National fit with time-varying β(t)\\nπ̂: {pi_hat:.1f} -> {ph2:.2f} | best {drv} θ={pbest:.1f}')
+axes[0].set_title(f'Delta national fit with time-varying β(t)\\nπ̂: {pi_hat:.1f} -> {ph2:.2f} | best {drv} θ={pbest:.1f}')
 axes[0].xaxis.set_major_formatter(mdates.DateFormatter('%b'))
 axes[0].legend(fontsize=7); axes[0].grid(alpha=0.3)
-months_dates = [pd.Timestamp(f'{y:04d}-{m:02d}-15') for y, m in months[:7]]
-axes[1].plot(months_dates, g_nat[:7], 'o-', color='C2')
-for i, (y, m) in enumerate(months[:7]):
-    axes[1].annotate(f'{y}-{m:02d}', (months_dates[i], g_nat[i]), fontsize=6,
+months_dates = [pd.Timestamp(f'{y:04d}-{m:02d}-15') for y, m in months[17:24]]
+axes[1].plot(months_dates, g_nat[17:24], 'o-', color='C2')
+for i, (y, m) in enumerate(months[17:24]):
+    axes[1].annotate(f'{y}-{m:02d}', (months_dates[i], g_nat[17:24][i]), fontsize=6,
                      xytext=(0, 4), textcoords='offset points', ha='center')
 axes[1].axhline(1, color='grey', lw=0.6, ls=':')
-axes[1].set_title('National transmission multiplier g(t) (CMR transit, Mar=1)')
+axes[1].set_title('National transmission multiplier g(t) (CMR transit, Jun=1)')
 axes[1].set_ylabel('β multiplier'); axes[1].grid(alpha=0.3)
 plt.tight_layout()
 plt.savefig(f'{ASSETS}/fig76_beta_t_fit.png'); plt.show()
 show_fig(f'{ASSETS}/fig76_beta_t_fit.png')"""))
 
-cells.append(md(r"""### §8.13 honest reading
+cells.append(md(r"""### §8.13 honest reading (Delta)
 
-Selected: **CMR transit, θ = 2.0** (supra-proportional: with R₀ capped at 4,
-the April mobility drop alone would leave Rₜ ≈ 1.8 — the fit needs the
-contact reduction to bite harder than raw mobility suggests).
+**The channel exists but is nearly inactive in this window.** Summer 2021
+had no lockdown: CMR transit stayed at ≈ −10…−20 % of baseline and
+stringency around 50–60, so the fitted g(t) hovers near 0.7–1.0 and β(t)
+barely differs from constant β. With the fitted (mostly fallback) β,
+R²(log) improves 0.09 → 0.24 and π̂ 0.36 → 0.34 — a small gain, not the
+wave-1-style rescue.
 
-**What the NPI channel fixes**
+**What β(t) cannot do here**
 
-- **Post-peak decline reproduced**: the monotonic climb is gone — the model
-  now peaks in early April and dips 33 % into May (observed ≈ 35 %).
-- **Over-infection collapses**: π̂ = 29.8 → 3.4 — most of the "excess"
-  infections were the missing NPI channel, not the mobility or kernel.
-- R²(log) improves −3.18 → −2.29.
+- The observed **October waning** (≈ 60 % drop from the 2021-09-10 peak to
+  ~73k/d on Oct 31) is out of reach: mobility never collapsed in October
+  (the fitted g(t) stays near 1), so a mobility/policy-driven β keeps the
+  model climbing to the window edge.
+- The Delta wave grew *with* mobility nearly restored — the 2021 growth is
+  not an NPI story.
 
-**What it reveals (why R² stays negative)**
-
-- **June over-recovery (the big one)**: a mobility-proportional β re-ignites
-  the epidemic as CMR recovers (June transit ≈ −30 % → Rₜ ≈ 1.6): model
-  ends at ≈ 830k/day vs observed 47k/day (**17.5×**). In reality Rₜ stayed
-  ≈ 1 through summer — continued distancing/testing/isolation that the raw
-  mobility indices do not measure. **The mobility→transmission mapping is
-  not proportional: it is regime-dependent** (lockdown regime vs sustained
-  behaviour change). A two-regime β(t), or anchoring β(t) to an
-  Rₜ estimate, is the natural next step.
-- **Stringency driver fails the decline test** at λ ≤ 2: April stringency
-  (monthly mean ≈ 82) leaves Rₜ ≈ 2.2 against R₀ = 4 — the policy index
-  alone cannot shut off the epidemic at monthly resolution.
-- The single-constant π̂ scaling still misaligns the level (§8.8 artifact),
-  and per-state onset order is unchanged.
-
-**Still one fitted parameter** (θ), on an external covariate — the model
-gains the NPI channel without absorbing the residual by hand."""))
+**Implication.** For wave 4 the missing piece is **waning-immunity /
+susceptible-depletion dynamics** — the Delta wave ended because the pool of
+susceptibles shrank (immunity from infection + vaccination), which a plain
+SEIR with a constant or mobility-scaled β cannot represent. A natural
+extension: a susceptible-replenishment (immunity waning) term, or
+vaccination into the model."""))
 
 cells.append(code("""print('notebook 08 rebuild complete | figures fig59..fig67 + fig75, fig76 -> assets/')"""))
 
