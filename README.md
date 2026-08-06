@@ -206,7 +206,7 @@ Individual-level simulation:
 ## Visualizations
 
 The project generates:
-- **52 figures in `assets/`** (currently fig29–fig80, dpi=300): epidemic
+- **53 figures in `assets/`** (currently fig29–fig81, dpi=300): epidemic
   dynamics, parameter sweeps, network structures, degree distributions,
   (notebook 08) gravity-kernel validation, per-state β estimates, national &
   state fits, spatial onset timing, mobility sensitivity, the β(t) NPI fit, and the SEIRV
@@ -266,7 +266,8 @@ Optional:
       kernel, per-state β with R₀≤4 cap, ~44k-ODE coupled degree-SEIR,
       §8.12 mobility sensitivity vs saturated per-pair flows,
       §8.13 time-varying β(t) from Google CMR / OxCGRT,
-      §8.14 SEIRV vaccination from CDC data)
+      §8.14 SEIRV vaccination from CDC data,
+      §8.16 two-regime β(t) + fitted π₀ — R²(linear) +0.96)
 - [x] Appendix B — Omicron (wave 5) run: immune-escape SEIRV grid
       + two-regime β(t) and fitted π₀ (R²(log) +0.74, peak ±6 days)
 - [x] Appendix A — gravity data-reconstruction report
@@ -278,7 +279,7 @@ Optional:
 
 ### Estimated Completion
 - Complete: all planned notebooks and modules build and execute
-- Figures: 52 in `assets/` (fig29–fig80)
+- Figures: 53 in `assets/` (fig29–fig81)
 
 ---
 
