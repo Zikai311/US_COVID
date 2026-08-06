@@ -347,7 +347,8 @@ class FusedMetapopulationSEIR:
 
     def __init__(self, state_list, populations, W_grav, mu0, s_func,
                  k_vals, P_k, beta, sigma, gamma, W_tensor=None, months=None,
-                 beta_scale=None):
+                 beta_scale=None, vac_flow=None, vac_efficacy=1.0,
+                 V0_dict=None, waning=0.0):
         self.states = list(state_list)
         self.n = len(self.states)
         self.idx = {s: i for i, s in enumerate(self.states)}
@@ -365,6 +366,19 @@ class FusedMetapopulationSEIR:
             raise ValueError('beta_scale requires months= (monthly grid)')
         self.beta_scale = (np.asarray(beta_scale, dtype=float)
                            if beta_scale is not None else None)
+        # SEIRV: vaccination depletes the susceptible pool.
+        #   dS/dt = -βkSθ - v_i(t)·(S/N) + w·V      (v = vac_flow·efficacy, people/day)
+        #   dV/dt =  v_i(t)·(S/N) - w·V
+        # vac_flow (n, T) monthly people/day; None -> 4-compartment SEIR (default).
+        if vac_flow is not None and months is None:
+            raise ValueError('vac_flow requires months= (monthly grid)')
+        self.vac_flow = (np.asarray(vac_flow, dtype=float)
+                         if vac_flow is not None else None)
+        self.vac_efficacy = float(vac_efficacy)
+        self.waning = float(waning)
+        self.V0 = np.array([(V0_dict or {}).get(s, 0.0) for s in self.states],
+                           dtype=float)
+        self.n_comp = 5 if self.vac_flow is not None else 4
         self.k = np.asarray(k_vals, dtype=float)
         self.P = np.asarray(P_k, dtype=float)
         self.K = len(self.k)
@@ -386,11 +400,14 @@ class FusedMetapopulationSEIR:
     # ── state layout helpers ──────────────────────────────────────────────────
 
     def _block(self, y, comp):
-        """(n, K) view of compartment comp (0=S,1=E,2=I,3=R)."""
+        """(n, K) view of compartment comp (0=S,1=E,2=I,3=R,4=V)."""
         return y[comp * self.n * self.K:(comp + 1) * self.n * self.K].reshape(self.n, self.K)
 
-    def _flatten(self, S, E, I, R):
-        return np.concatenate([a.ravel() for a in (S, E, I, R)])
+    def _flatten(self, S, E, I, R, V=None):
+        arrs = [a.ravel() for a in (S, E, I, R)]
+        if V is not None:
+            arrs.append(V.ravel())
+        return np.concatenate(arrs)
 
     # ── initial conditions ────────────────────────────────────────────────────
 
@@ -398,21 +415,27 @@ class FusedMetapopulationSEIR:
         """
         I0_dict: {abbrev: infectious count} (distributed across classes ∝ P_k).
         E0_dict: optional {abbrev: exposed count}; default E0 = I0·(r+γ)/σ ≈ I0.
+        SEIRV mode: V0_dict gives the vaccinated pool, S0 = N - I0 - E0 - V0.
         """
         S = np.zeros((self.n, self.K))
         E = np.zeros((self.n, self.K))
         I = np.zeros((self.n, self.K))
         R = np.zeros((self.n, self.K))
+        V = np.zeros((self.n, self.K)) if self.n_comp == 5 else None
         for i, st in enumerate(self.states):
             i0 = I0_dict.get(st, 0.0)
             e0 = (E0_dict or {}).get(st, i0)
             pop = self.N[i]
+            v0 = self.V0[i] if V is not None else 0.0
+            s0 = max(pop - i0 - e0 - v0, 0.0)
             # counts per class: distribute proportional to P_k
-            S[i] = (pop - i0 - e0) * self.P
+            S[i] = s0 * self.P
             E[i] = e0 * self.P
             I[i] = i0 * self.P
             R[i] = 0.0
-        return self._flatten(S, E, I, R)
+            if V is not None:
+                V[i] = v0 * self.P
+        return self._flatten(S, E, I, R, V)
 
     # ── RHS ───────────────────────────────────────────────────────────────────
 
@@ -444,6 +467,7 @@ class FusedMetapopulationSEIR:
         E = self._block(y, 1)
         I = self._block(y, 2)
         R = self._block(y, 3)
+        V = self._block(y, 4) if self.n_comp == 5 else None
         N = self.N
 
         # theta_i = fraction of infectious stubs = Σ_k k I_ik / (N_i <k>)
@@ -462,15 +486,30 @@ class FusedMetapopulationSEIR:
         dI_l = self.sigma * E - self.gamma * I
         dR_l = self.gamma * I
 
+        # vaccination: v_i(t) people/day drawn from the susceptible share;
+        # waning (optional) returns V to S.
+        if V is not None:
+            vt = self.vac_flow[:, self._month_index(int(np.floor(t)))] * self.vac_efficacy
+            vac_out = vt[:, None] * (S / N[:, None])
+            dS_l = dS_l - vac_out
+            dV_l = vac_out - self.waning * V
+            if self.waning > 0:
+                dS_l = dS_l + self.waning * V
+        else:
+            dV_l = None
+
         # mobility: net_ik = Σ_j [W_ji f_jk − W_ij f_ik],  f = X/N
         W_t = self._W_at(t)
         rowsum = W_t.sum(axis=1)                      # = s_i μ_0,i
-        for X, dX in ((S, dS_l), (E, dE_l), (I, dI_l), (R, dR_l)):
+        comps = [(S, dS_l), (E, dE_l), (I, dI_l), (R, dR_l)]
+        if V is not None:
+            comps.append((V, dV_l))
+        for X, dX in comps:
             frac = X / N[:, None]
             net = W_t.T @ frac - frac * rowsum[:, None]
             dX += net
 
-        return self._flatten(dS_l, dE_l, dI_l, dR_l)
+        return self._flatten(dS_l, dE_l, dI_l, dR_l, dV_l)
 
     # ── simulate ──────────────────────────────────────────────────────────────
 
@@ -497,11 +536,14 @@ class FusedMetapopulationSEIR:
         E = self.compartment(1).sum(axis=1)
         I = self.compartment(2).sum(axis=1)
         R = self.compartment(3).sum(axis=1)
+        if self.n_comp == 5:
+            V = self.compartment(4).sum(axis=1)
+            return S, E, I, R, V
         return S, E, I, R
 
     def national_totals(self):
-        S, E, I, R = self.state_totals()
-        return S.sum(0), E.sum(0), I.sum(0), R.sum(0)
+        tot = self.state_totals()
+        return tuple(t.sum(0) for t in tot)
 
     def daily_new_infections(self):
         """True new infections per day per state: β_i Σ_k k S_ik θ_i (n, T)."""

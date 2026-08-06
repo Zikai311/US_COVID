@@ -204,11 +204,11 @@ Individual-level simulation:
 ## Visualizations
 
 The project generates:
-- **48 figures in `assets/`** (currently fig29–fig76, dpi=300): epidemic
+- **49 figures in `assets/`** (currently fig29–fig77, dpi=300): epidemic
   dynamics, parameter sweeps, network structures, degree distributions,
   (notebook 08) gravity-kernel validation, per-state β estimates, national &
-  state fits, spatial onset timing, mobility sensitivity, and the β(t) NPI
-  fit, plus (appendix A) the data-reconstruction figures fig68–fig74
+  state fits, spatial onset timing, mobility sensitivity, the β(t) NPI fit, and the SEIRV
+  vaccination fit, plus (appendix A) the data-reconstruction figures fig68–fig74
 - **3-5 animations** of spreading processes (abm.py/network_sir.py)
 - Phase portraits, heatmaps, degree distributions
 
@@ -263,7 +263,8 @@ Optional:
       (56 jurisdictions, 2020-01→2023-03 BTS mobility, calibrated gravity
       kernel, per-state β with R₀≤4 cap, ~44k-ODE coupled degree-SEIR,
       §8.12 mobility sensitivity vs saturated per-pair flows,
-      §8.13 time-varying β(t) from Google CMR / OxCGRT)
+      §8.13 time-varying β(t) from Google CMR / OxCGRT,
+      §8.14 SEIRV vaccination from CDC data)
 - [x] Appendix A — gravity data-reconstruction report
       (`notebooks/appendix_A.ipynb`, `scripts/build_appendix_a.py`):
       calibrated gravity model vs raw BTS T-100 flows, all validation tests
@@ -273,7 +274,7 @@ Optional:
 
 ### Estimated Completion
 - Complete: all planned notebooks and modules build and execute
-- Figures: 48 in `assets/` (fig29–fig76)
+- Figures: 49 in `assets/` (fig29–fig77)
 
 ---
 

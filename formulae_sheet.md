@@ -313,30 +313,30 @@ $b_N$, $b_d$, per-state $\mu_{0,i}$, per-month $s_i(t)$).
     Rₜ-anchored β is the documented next step. The stringency driver fails
     to produce a decline at λ ≤ 2 (April stringency ≈ 82 leaves Rₜ ≈ 2.2
     against R₀ = 4).
-11. **Vaccination — susceptible-pool depletion (SEIRV)** (planned 2026-08-06;
-    data **downloaded**: CDC "COVID-19 Vaccinations in the United States,
-    County" (data.cdc.gov `8xkx-amqh`) aggregated state×date by
-    `scripts/fetch_vaccination_data.py` →
-    `data/cdc_vax_state_daily.csv` / `cdc_vax_state_monthly.csv`,
-    56 jurisdictions, 2020-12-13 → 2023-05-10; national fully-vaccinated
-    coverage: 2021-06 ≈ 42 %, 2021-09 ≈ 51 %, 2021-12 ≈ 61 %,
-    2022-06 ≈ 66 %).  Planned model: fifth compartment V with
+11. **Vaccination — susceptible-pool depletion (SEIRV)** (**implemented
+    2026-08-06**, notebook 08 §8.14; data: CDC "COVID-19 Vaccinations in the
+    United States, County" (data.cdc.gov `8xkx-amqh`) aggregated state×date
+    by `scripts/fetch_vaccination_data.py` → `data/cdc_vax_state_daily.csv` /
+    `cdc_vax_state_monthly.csv`, 56 jurisdictions, 2020-12-13 → 2023-05-10;
+    national fully-vaccinated coverage: 2021-06 ≈ 42 %, 2021-09 ≈ 51 %,
+    2021-12 ≈ 61 %).  Fifth compartment V:
     $$\frac{dS_{ik}}{dt} = -\beta k S_{ik}\theta_i - v_i(t)\,\frac{S_{ik}}{N_i} + w\,V_{ik},\qquad
     \frac{dV_{ik}}{dt} = v_i(t)\,\frac{S_{ik}}{N_i} - w\,V_{ik},$$
-    where $v_i(t)$ = monthly fully-vaccinated flow (cumulative
-    `series_complete` difference ÷ $T_{\text{mo}}$) scaled by an efficacy
-    ε (≈ 0.75 for Delta infection protection; fit or fixed), w = waning
-    rate (0 for the 2021 window).  Initial condition: $V_0$ = cumulative
-    coverage at window start × ε, $S_0 = N_i - I_0 - E_0 - V_0$.
-    Implementation: `FusedMetapopulationSEIR(vac_flow=(n,T), vac_efficacy=ε,
-    V0_dict=...)` → 5·n·K ODEs; `vac_flow=None` keeps the current
-    4-compartment behaviour bit-identical.  Expected payoff (Delta window,
-    nb08 §8.14): susceptible depletion bounds total infections (π̂ → ≈1,
-    currently 0.36), produces the September peak and October decline
-    (currently missing), and should lift R²(log) beyond the 0.24 of §8.13.
-    Caveats: full-immunity approximation (ε tuning), breakthrough and
-    infection-acquired immunity are outside V, waning matters from 2022 on,
-    and wave-1 (Mar–Jun 2020) is unaffected (no vaccination then).
+    $v_i(t)$ = monthly fully-vaccinated flow (`series_complete` month-end
+    differences ÷ $T_{\text{mo}}$) × efficacy ε; $V_0$ = cumulative coverage
+    at window start × ε, $S_0 = N_i - I_0 - E_0 - V_0$; waning w = 0 for the
+    2021 window; V travels with the random-flux mobility; S+E+I+R+V
+    conserved globally (5·n·K = 55,440 ODEs).  `FusedMetapopulationSEIR(
+    vac_flow=(n,T), vac_efficacy=ε, V0_dict=..., months=...)`; `vac_flow=None`
+    keeps the 4-compartment SEIR bit-identical.  **Wave-4 result** (with the
+    Jul–Aug 2021 β window, decision 10 §8.5): π̂ 3.37 → 1.67, peak
+    2021-10-02 → 2021-09-24 (observed 09-10), R²(log) −0.29 → **+0.49**,
+    R²(linear) −0.21 → **+0.36**, October decline reproduced (end/peak 0.67
+    vs observed 0.41) — the first configuration with positive fit in both
+    metrics.  ε = 1.0 wins the grid (absorbs infection-acquired immunity and
+    breakthrough protection, so ε > true VE ≈ 0.6–0.8 is expected); β is
+    rescaled by 1/s_eff (per-state susceptible share) to compensate for
+    vaccination in the fit window — a joint β–ε fit is the next step.
 
 **Still open (resolve during implementation):**
 
