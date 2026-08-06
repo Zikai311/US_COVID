@@ -359,7 +359,15 @@ g(t) = \\begin{cases} 1 & \\text{before the peak}\\\\ \\rho & \\text{after the p
   reduction, because Delta's decline was mostly the shrinking susceptible
   pool. For the 2022 Omicron wave the fit gives $\rho=0.25$: there,
   behaviour was the main driver (appendix B compares the two waves in
-  detail)."""))
+  detail).
+
+Note: $\beta_{0,i}$ in this formula is **exactly the value calibrated in
+Step 4** — Step 6 does not re-derive $\beta$ from the case data, it only
+scales it after the peak. The Step-4 slope method cannot be applied month
+by month, because it assumes exponential growth with the susceptible pool
+still $\approx N$; once the wave peaks, the observed slope mixes
+transmission, behaviour and depletion, so a different piece of information
+(the regime switch) is needed."""))
 cells.append(code("""months = [f'{y:04d}-{m:02d}' for y, m in [(2021, 8), (2021, 9), (2021, 10)]]
 g_aug, g_sep, g_oct = 1.0, (9 + 21 * 0.9) / 30, 0.9
 print('two-regime transmission multiplier g(t):')
