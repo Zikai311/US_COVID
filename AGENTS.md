@@ -2,16 +2,19 @@
 
 Educational epidemic-modeling project (SIR → SEIR → network → degree-based → ABM → COVID-19 case study → metapopulation).
 
-## Critical: docs are stale
+## Critical: docs
 
-`README.md`, `QUICKSTART.md`, `IMPLEMENTATION_STATUS.md`, and `PROJECT_SUMMARY.txt` describe the project as of 2026-06-24 and claim notebooks 03–06 don't exist. They **do** exist now, along with two undocumented notebooks. Trust the code and notebooks, not the prose status sections:
-- `notebooks/`: 00_introduction, 01_SIR, 02_SEIR, 03_network_sir, 04_degree_based_sir, 05_abm, 06_covid_case_study, 07_conclusion, **07_data_fitting** (duplicate 07 prefix), **08_metapopulation**
-- `07_data_analysis.ipynb` (renamed from `07_data_fitting.ipynb`) is **data-analysis only** (overview, national-vs-state consistency check, wave stats, state-level small-multiple panels) — all SIR/SEIR fitting sections were removed; the user will specify the real modelling approach separately. `assets/fig31–fig35` are orphaned from the removed sections; state panels use `fig47_states_1 … fig53_states_7`.
-- `src/` also contains `data_loader.py` (NYT COVID data) and `metapopulation.py` (state-network gravity model) — undocumented in README.
+`README.md` describes the project (updated 2026-08-06). The old
+`QUICKSTART.md`, `IMPLEMENTATION_STATUS.md`, `PROJECT_SUMMARY.txt`,
+`sepecification.md`, and `implementation_plan.md` no longer exist. Trust the
+code and notebooks over any prose status section:
+- `notebooks/`: 00_introduction, 01_SIR, 02_SEIR, 03_network_sir, 04_degree_based_sir, 05_abm, 06_covid_case_study, 07_conclusion, **07_data_analysis** (data-only: overview, national-vs-state consistency, wave stats, state small-multiples; all SIR/SEIR fitting removed — user specifies the modelling approach separately), **08_metapopulation** (rebuilt 2026-08-06; see `scripts/build_nb08.py`)
+- `07_data_analysis.ipynb`: `assets/fig31–fig35` are orphaned from removed sections; state panels use `fig47_states_1 … fig53_states_7`.
+- `src/fused_metapopulation.py` is the **active** metapopulation module (used by notebook 08); `src/metapopulation.py` is the legacy 51-state module (superseded, still present for reference). `src/data_loader.py` loads NYT COVID + BTS/TSA aviation data.
 
 ## Environment
 
-- No git repo, no CI, no tests, no lint/typecheck config. Verification = run the code.
+- Git repo exists on `main` (`5c9ed27` initial, `ea47c63` notebook-08 rebuild) with `data/`, `venv/`, caches in `.gitignore`. No CI, no tests, no lint/typecheck config. Verification = run the code.
 - One virtualenv exists: `venv/` (Python 3.14; referenced by `activate.sh`, which hard-codes the absolute repo path so it only works on this machine). A `.venv/` existed briefly but is gone — use `venv/bin/python` / `venv/bin/jupyter` or `source venv/bin/activate`.
 - Fast sanity check: `venv/bin/python -c "import sir, seir, network_sir, degree_sir, abm"` from `src/` or after adding `src` to `sys.path`.
 
@@ -19,6 +22,8 @@ Educational epidemic-modeling project (SIR → SEIR → network → degree-based
 
 - `src/*.py` are flat modules, **not** a package — import as `from sir import simulate_sir` (notebooks do `sys.path.insert(0, '../src')`; never `import src.sir`).
 - `data/` holds real NYT COVID CSVs (`nyt_us_national.csv`, `nyt_us_states.csv`) used by `data_loader.py` and notebooks 06–08, plus aviation data: `t100_market_2020_2023.csv.gz` (raw BTS T-100 Market, US carriers, 852,845 rows, monthly, downloaded from transtats.bts.gov 2026-08-05 — the authoritative source for everything below; it supersedes the hard-coded `metapopulation.BTS_MONTHLY_SCALE` which only covered 2020-01→2022-04 and was approximate, max |Δ|≈0.30 vs T-100; the module dict is still there until the metapopulation rework), `tsa_checkpoint_daily.csv` (raw TSA checkpoint throughput, daily, 2019-01-01→2023-12-31, fetched from tsa.gov 2026-08-05), `bts_state_pairs_monthly.csv` (**state→state** monthly passengers, 63,721 rows, 56×56 jurisdictions — the `W_ij` input), `bts_state_monthly.csv` (per-state monthly series: single time column `month` as `YYYY-MM`, plus `state`, `outbound`, `inbound`, `net` = inbound−outbound; missing months = zero traffic, e.g. DE 2022-08) and `bts_state_jan2020.csv` (per-state Jan-2020 outbound baseline, state-constant — the denominator for the model's per-state `miu(t)`; `scale_out` is deliberately **not** stored, the model computes its own mobility factor). The derived **national** scale CSVs (`bts_aviation_monthly.csv`, `bts_aviation_daily.csv`) were **removed** (2026-08-05): the project models state-level mobility, and the national series is only used for the §7.5 figures in notebook 07, where it is computed in-memory from the raw files. Jurisdiction mapping quirks (see notebook 07 §7.6): DCA is re-attributed to DC (T-100 codes it VA; IAD→VA, BWI→MD); T-100's single Pacific code 'TT' is split by airport into GU (GUM,UAM), MP (SPN,TIQ,ROP), AS (PPG); AWK/MDY dropped. All 56 NYT jurisdictions have data. `data_loader.py` has `load_tsa_daily()` / `load_bts_state_pairs()` / `load_bts_state_monthly()` / `load_bts_state_jan2020()`; the state-level derived CSVs are regenerated by notebook 07 §7.6. `data_loader.py` resolves `data/` relative to the repo root.
-- Figures are saved **directly into `assets/`** (e.g. `assets/fig37_national_fit.png`, dpi=300), continuing the `figNN_<name>` numbering (latest: fig58). `assets/figures`, `gifs/`, `videos/` subdirs are unused/empty; the notebooks write to `assets/` root.
-- `metapopulation.py`: `MetapopulationSIR` simulates 51 states (50+DC); `fit_state_betas()` requires `simulate()` to be run first; gravity matrix is row-normalized, mobility scaled via BTS aviation data (`build_time_varying_W`).
+- Figures are saved **directly into `assets/`** (e.g. `assets/fig37_national_fit.png`, dpi=300), continuing the `figNN_<name>` numbering (latest: fig67, notebook 08). `assets/figures`, `gifs/`, `videos/` subdirs are unused/empty; the notebooks write to `assets/` root.
+- `fused_metapopulation.py` (notebook 08): `FusedMetapopulationSEIR` — 56 jurisdictions (50 states + DC + 5 territories), degree-class SEIR (truncated power law, ⟨k⟩=6, α=2.659, 198 classes) × time-varying gravity mobility: `W_ij(t) = s_i(t)·μ0_i·W^grav_ij`; `calibrate_mobility()` (excludes intra-state self-flows), `build_gravity_kernel(b_N, b_d)` (data-calibrated exponents from `fit_gravity_exponents` PPML: b_N≈1.00, b_d≈0.55), `fit_beta_from_growth()` (per-state β, slope-invariant, R₀ cap), `simulate()` (RK45, t_eval; conservation is global, per-state totals move with travellers). θ = infectious-stub fraction `Σk·I/N⟨k⟩` (the P-weighted form is subcritical — do not "fix" it back).
+- `metapopulation.py` (legacy, notebook 07): `MetapopulationSIR` simulates 51 states (50+DC); `fit_state_betas()` requires `simulate()` to be run first; gravity matrix is row-normalized, mobility scaled via its own `BTS_MONTHLY_SCALE` dict (approximate; superseded by T-100).
+- `scripts/`: `build_nb08.py` (**regenerates `notebooks/08_metapopulation.ipynb` from scratch — edit this, not the .ipynb**), `gravity_validation.py` + `gravity_corr_states.csv` (kernel validation results, ~20 s to rerun).
 - Notebooks execute in numbered order; rerun a whole notebook after changing `src/` — imports are plain `from x import y` with no reload magic.

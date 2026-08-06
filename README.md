@@ -15,7 +15,9 @@ This project progressively builds understanding of epidemic modelling through in
 3. **Network SIR** — Disease spread on contact networks
 4. **Degree-Based SIR** — Heterogeneous connectivity
 5. **Agent-Based Models** — Individual spatial simulations
-6. **COVID-19 Case Study** — Real-world application
+6. **COVID-19 Case Study** — Real-world application (NYT data)
+7. **Metapopulation Model** — Degree-based SEIR coupled across US states with
+   time-varying BTS air-mobility via a calibrated gravity kernel
 
 ---
 
@@ -55,8 +57,10 @@ Finial_Project/
 │   ├── 03_network_sir.ipynb
 │   ├── 04_degree_based_sir.ipynb
 │   ├── 05_abm.ipynb
-│   ├── 06_covid_case_study.ipynb
-│   └── 07_conclusion.ipynb
+│   ├── 06_covid_case_study.ipynb     # NYT COVID-19 data
+│   ├── 07_conclusion.ipynb
+│   ├── 07_data_analysis.ipynb        # data-only panels (no fitting)
+│   └── 08_metapopulation.ipynb       # rebuilt 2026-08-06 (build_nb08.py)
 │
 ├── src/                # Python modules
 │   ├── sir.py         # SIR model implementation
@@ -64,18 +68,26 @@ Finial_Project/
 │   ├── network_sir.py # Network epidemic models
 │   ├── degree_sir.py  # Degree-based models
 │   ├── abm.py         # Agent-based model
+│   ├── data_loader.py # NYT COVID + BTS/TSA aviation data loaders
+│   ├── metapopulation.py          # legacy 51-state gravity SIR (notebook 07)
+│   ├── fused_metapopulation.py   # active 56-jurisdiction degree-SEIR x mobility (08)
 │   ├── visualisation.py  # Plotting utilities
 │   ├── animation.py   # Animation tools
 │   └── utils.py       # Helper functions
 │
-├── assets/            # Output directory
-│   ├── figures/      # Generated plots
-│   ├── gifs/         # Animations
-│   └── videos/       # Video exports
+├── scripts/            # Reproducible notebook builders + validation
+│   ├── build_nb08.py  # regenerates notebooks/08_metapopulation.ipynb
+│   ├── gravity_validation.py
+│   └── gravity_corr_states.csv
 │
-├── requirements.txt   # Python dependencies
-├── sepecification.md  # Project specification
-└── implementation_plan.md  # Development plan
+├── assets/            # Figures (fig59–fig67 from notebook 08, dpi=300)
+│   ├── figures/      # (unused; notebooks write to assets/ root)
+│   ├── gifs/
+│   └── videos/
+│
+├── data/              # real data (gitignored: NYT COVID, BTS T-100, TSA daily)
+├── requirements.txt
+└── AGENTS.md
 ```
 
 ---
@@ -189,8 +201,11 @@ Individual-level simulation:
 ## Visualizations
 
 The project generates:
-- **~28 figures** showing epidemic dynamics, parameter sweeps, network structures
-- **3-5 animations** of spreading processes
+- **39 figures in `assets/`** (currently fig29–fig67, dpi=300): epidemic
+  dynamics, parameter sweeps, network structures, degree distributions, and
+  (notebook 08) gravity-kernel validation, per-state β estimates, national &
+  state fits, and spatial onset timing
+- **3-5 animations** of spreading processes (abm.py/network_sir.py)
 - Phase portraits, heatmaps, degree distributions
 
 ---
@@ -236,21 +251,18 @@ Optional:
 - [x] Core modules (SIR, SEIR, Network SIR, Degree-based, ABM)
 - [x] Visualization utilities
 - [x] Animation framework
-- [x] Introduction notebook
-- [x] SIR notebook (Part 1)
-- [x] SEIR notebook (Part 2)
-
-### In Progress
-- [ ] Network SIR notebook (Part 3)
-- [ ] Degree-based notebook (Part 4)
-- [ ] ABM notebook (Part 5)
-- [ ] COVID case study (Part 6)
-- [ ] Conclusion notebook (Part 7)
+- [x] Notebooks 00–06 (introduction → COVID-19 case study)
+- [x] Notebook 07 conclusion **and** 07_data_analysis (data-only panels,
+      2026-08-05: all SIR/SEIR fitting removed)
+- [x] Notebook 08 metapopulation — **rebuilt 2026-08-06** with
+      `src/fused_metapopulation.py` + `scripts/build_nb08.py`
+      (56 jurisdictions, 2020-01→2023-03 BTS mobility, calibrated gravity
+      kernel, per-state β with R₀≤4 cap, ~44k-ODE coupled degree-SEIR)
+- [x] Gravity-kernel validation (`scripts/gravity_validation.py`)
 
 ### Estimated Completion
-- **Code**: ~1,400 lines (target: 1,200-2,000)
-- **Documentation**: ~4,000 words (target: 6,000-9,000)
-- **Figures**: 10+ generated (target: 28+)
+- Complete: all planned notebooks and modules build and execute
+- Figures: 39 in `assets/` (fig29–fig67)
 
 ---
 
@@ -321,9 +333,10 @@ This project follows standard epidemic modeling theory:
 This is an educational project. Potential enhancements:
 
 - [ ] Interactive parameter widgets
-- [ ] Real data fitting (COVID-19)
+- [x] Real data fitting (COVID-19, notebooks 06 + 08)
 - [ ] Vaccination models (SIRV)
 - [ ] Age-structured models
+- [ ] Time-varying β (NPI) in the metapopulation (notebook 08 §8.11 follow-up)
 - [ ] GPU-accelerated ABM
 
 ---
@@ -336,7 +349,9 @@ Educational project — free to use and modify.
 
 ## Contact
 
-For questions about this implementation, refer to the specification and implementation plan documents included in the project.
+For questions about this implementation, see the notebooks (executable in
+numbered order) and `src/` modules. The metapopulation entry point is
+`notebooks/08_metapopulation.ipynb`, regenerable via `scripts/build_nb08.py`.
 
 ---
 
