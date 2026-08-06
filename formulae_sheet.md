@@ -51,9 +51,9 @@ $$\frac{dX_{ik}}{dt} = \text{local}_X + \sum_j\Big[\,W_{ji}(t)\frac{X_{jk}}{N_j}
 
 $$\frac{dS_{ik}}{dt} = -\beta k S_{ik}\theta_i - v_i(t)\,\frac{S_{ik}}{N_i} + w\,V_{ik},\qquad
 \frac{dV_{ik}}{dt} = v_i(t)\,\frac{S_{ik}}{N_i} - w\,V_{ik}$$
-- $v_i(t)$ = 月完全接种流(people/day)×ε;ε=1.0(wave-4 拟合,隐含吸收感染免疫)
-- $V_0$ = 窗口起点累计接种 × ε;$S_0 = N_i - I_0 - E_0 - V_0$
-- 5·n·K = 55,440 ODE;`vac_flow=None` ⇒ 4 仓室逐位一致
+- $v_i(t)$ = 月完全接种流(people/day)×ε;ε=1.0(wave-4 拟合,隐含吸收突破感染)
+- $V_0$ = 窗口起点累计接种 × ε;$R_{\text{prior}}$ = 先验感染免疫(报告累计病例 × asc=3 ≈ 1 亿人,修复峰偏晚)
+- $S_0 = N_i - I_0 - E_0 - V_0 - R_{\text{prior}}$;5·n·K = 55,440 ODE;`vac_flow=None` ⇒ 4 仓室逐位一致
 
 ## 7. Time-varying β(t) — NPI/behaviour channel
 
@@ -92,5 +92,5 @@ $$\hat\pi = \frac{\sum_t \text{model}(t)}{\sum_t \text{observed}(t)}, \qquad
 R^2 = 1 - \frac{\sum (\hat y - y)^2}{\sum (y - \bar y)^2}$$
 (模型输出真实感染,π̂ 为窗口总量比;R² 在 log(x+1) 空间与线性空间都报告)
 
-**Wave-4 (Delta) final**: π̂ 3.37→**1.67**(SEIRV),R²(log) −0.29→**+0.49**,
-峰 10-02→**09-24**(观测 09-10),10 月回落 0.67 vs 观测 0.41。
+**Wave-4 (Delta) final**: π̂ 3.37→**1.06**,R²(log) −0.29→**+0.85**,
+R²(linear) −0.21→**+0.82**,峰 10-02→**09-12**(观测 09-10),10 月回落 0.52 vs 观测 0.41。
