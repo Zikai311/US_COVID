@@ -191,9 +191,9 @@ them, daily "passenger flows" move people around.
 **The number of people travelling from state $i$ to state $j$ per day**
 (formula sheet §4):
 
-$$W_{ij}(t) = \underbrace{s_i(t)}_{travel\ scale}\cdot
-\underbrace{\mu_{0,i}}_{baseline\ flow}\cdot
-\underbrace{W_{ij}^{\\text{grav}}}_{direction\ share}$$
+$$W_{ij}(t) = \underbrace{s_i(t)}_{\text{travel scale}}\cdot
+\underbrace{\mu_{0,i}}_{\text{baseline flow}}\cdot
+\underbrace{W_{ij}^{\text{grav}}}_{\text{direction share}}$$
 
 Three factors:
 
@@ -505,6 +505,12 @@ the formulas, but to remember that every step asked "what did the previous
 version leave out?". A model's value is not that it "looks like" reality —
 it is **which real-world rule it managed to put into mathematics**."""))
 cells.append(code("""print('notebook 06 rebuild complete | figures fig82..fig86 -> assets/')"""))
+
+for c in cells:
+    if c['cell_type'] == 'markdown':
+        txt = c['source'] if isinstance(c['source'], str) else ''.join(c['source'])
+        txt = txt.replace('\\\\', '\\')
+        c['source'] = txt.split('\n')
 
 nb['cells'] = cells
 nb['metadata'] = {
