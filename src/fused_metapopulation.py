@@ -348,7 +348,7 @@ class FusedMetapopulationSEIR:
     def __init__(self, state_list, populations, W_grav, mu0, s_func,
                  k_vals, P_k, beta, sigma, gamma, W_tensor=None, months=None,
                  beta_scale=None, vac_flow=None, vac_efficacy=1.0,
-                 V0_dict=None, waning=0.0):
+                 V0_dict=None, waning=0.0, R_init_dict=None):
         self.states = list(state_list)
         self.n = len(self.states)
         self.idx = {s: i for i, s in enumerate(self.states)}
@@ -378,6 +378,9 @@ class FusedMetapopulationSEIR:
         self.waning = float(waning)
         self.V0 = np.array([(V0_dict or {}).get(s, 0.0) for s in self.states],
                            dtype=float)
+        # prior-infection immunity at window start (R_0 initial condition)
+        self.R_init = np.array([(R_init_dict or {}).get(s, 0.0) for s in self.states],
+                               dtype=float)
         self.n_comp = 5 if self.vac_flow is not None else 4
         self.k = np.asarray(k_vals, dtype=float)
         self.P = np.asarray(P_k, dtype=float)
@@ -427,12 +430,13 @@ class FusedMetapopulationSEIR:
             e0 = (E0_dict or {}).get(st, i0)
             pop = self.N[i]
             v0 = self.V0[i] if V is not None else 0.0
-            s0 = max(pop - i0 - e0 - v0, 0.0)
+            r0 = self.R_init[i]
+            s0 = max(pop - i0 - e0 - v0 - r0, 0.0)
             # counts per class: distribute proportional to P_k
             S[i] = s0 * self.P
             E[i] = e0 * self.P
             I[i] = i0 * self.P
-            R[i] = 0.0
+            R[i] = r0 * self.P
             if V is not None:
                 V[i] = v0 * self.P
         return self._flatten(S, E, I, R, V)
