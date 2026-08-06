@@ -1,6 +1,8 @@
 # Fused Degree-Based SEIR × Metapopulation Model — Formula Sheet
 
-**PART II (2026-08-05).** Replaces the old "single-population SEIR +
+**PART II (2026-08-05), amended 2026-08-06** (θ stub-fraction form;
+per-state β calibration with R₀ cap; intra-state self-flow exclusion).
+Replaces the old "single-population SEIR +
 gravity mobility" sheet. Each state/node is a **degree-based SEIR** model
 (notebook 04) embedded in a **gravity metapopulation** (notebook 08);
 a traveller keeps their degree when moving between states.
@@ -32,9 +34,20 @@ $$\frac{dI_k}{dt} = \sigma\, E_k - \gamma\, I_k$$
 
 $$\frac{dR_k}{dt} = \gamma\, I_k$$
 
-The edge-to-infection probability is
+The edge-to-infection probability is the **fraction of infectious stubs
+(contacts)** — degree-weighted, not population-weighted:
 
-$$\theta = \frac{1}{\langle k \rangle}\sum_k k\, P(k)\, I_k.$$
+$$\theta = \frac{1}{N\langle k \rangle}\sum_k k\, I_k
+\quad \Big(\, \equiv \frac{1}{\langle k\rangle}\sum_k k\, P(k)\, i_k,\quad
+i_k = \frac{I_k}{N\,P(k)} \ \text{class-conditional prevalence} \Big)$$
+
+**Do NOT put $P(k)$ inside the sum together with counts**: the mixed form
+$\frac{1}{\langle k\rangle}\sum_k k\,P(k)\,I_k/N$ is dimensionally confused
+and **subcritical** — its linearised growth moment is $\sum k^2 P(k)^2$
+(≈ 1, low-*k*-dominated) instead of $\langle k^2 \rangle$, so the epidemic
+decays even for $R_0 > 1$.  (This bug was found and fixed during the
+2026-08-06 notebook-08 rebuild; the homogeneous single-degree case is
+indistinguishable between the two forms.)
 
 - Only **infectious** individuals transmit; **exposed individuals do NOT**.
   This is a modelling assumption (latent period = not yet infectious);
@@ -60,11 +73,13 @@ where:
   - *classic* (Viboud 2006):
     $$W_{ij}^{\text{gravity}} \propto \frac{\sqrt{N_i N_j}}{d_{ij}^{\alpha}}$$
   - *data-calibrated* (default, 2026-08-05):
-    $$W_{ij}^{\text{gravity}} \propto \frac{N_j^{\,b_N}}{d_{ij}^{\,b_d}}$$
+    $$W_{ij}^{\text{gravity}} \propto \frac{N_i^{\eta}\, N_j^{\,b_N}}{d_{ij}^{\,b_d}}$$
     with $b_N \approx 1.00$, $b_d \approx 0.55$ estimated by PPML
     (Poisson pseudo-ML, BFGS) on the BTS T-100 monthly panel
     (56×56 inter-state flows, 2020-01 → 2023-03, origin + month fixed
-    effects).  The origin factor $N_i$ is irrelevant under row-normalisation.
+    effects).  The origin exponent $\eta$ (default 0.5, kept for kernel
+    symmetry) cancels under row-normalisation and is irrelevant to the
+    coupling shares.
   (row-normalised so that $\sum_j W_{ij}^{\text{gravity}} = 1$).
 - $s_i(t)$ — **per-state BTS-calibrated monthly scale factor**,
   $s_i(\text{Jan-2020}) = 1$.
@@ -130,29 +145,37 @@ Decouple one state at a time, using the monthly state→state flows.
    are monthly; the model's time unit is one day, so divide by the
    month length $T_{\text{mo}} = 30.44$ d):
 
-$$\mu_{0,i} = \frac{\sum_j F_{ij}(\text{Jan-2020})}{T_{\text{mo}}\sum_j W_{ij}^{\text{gravity}}}
-           = \frac{\sum_j F_{ij}(\text{Jan-2020})}{T_{\text{mo}}},$$
+$$\mu_{0,i} = \frac{\sum_{j\ne i} F_{ij}(\text{Jan-2020})}{T_{\text{mo}}\sum_j W_{ij}^{\text{gravity}}}
+           = \frac{\sum_{j\ne i} F_{ij}(\text{Jan-2020})}{T_{\text{mo}}},$$
 
 i.e. each state's total Jan-2020 outbound passengers per day (equivalently:
 the flow-weighted mean of the ratios $F_{ij}/W_{ij}^{\text{gravity}}$ with
 weights $W_{ij}^{\text{gravity}}$; matches `bts_state_monthly.csv`
-`outbound` ÷ 30.44).
+`outbound` ÷ 30.44).  **The sums run over $j \ne i$** — BTS includes
+intra-state self-flows (e.g. AK→AK ≈ 203 k/month; MP ~65 % of its total);
+the model's coupling is inter-state only, so these are excluded.
 
 3. **Later months:** with $\mu_{0,i}$ known, back out each state's scale
-   evolution as its total outflow relative to its own baseline:
+   evolution as its total outflow (again $j\ne i$) relative to its own
+   baseline:
 
-$$s_i(t) = \frac{\sum_j F_{ij}(t)}{\sum_j F_{ij}(\text{Jan-2020})}.$$
+$$s_i(t) = \frac{\sum_{j\ne i} F_{ij}(t)}{\sum_{j\ne i} F_{ij}(\text{Jan-2020})}.$$
 
 - **Self-consistent by construction:** the model's total outbound
   $\sum_j W_{ij}(t) = s_i(t)\,\mu_{0,i}$ exactly equals the observed total
-  outbound **per day** in every month.
+  outbound **per day** in every month (self-flows excluded, $j\ne i$).
 - $s_i(t)$ is the per-state monthly mobility relative to its own
   Jan-2020 baseline (dimensionless) — compatible with the per-state
   outbound ratios in `bts_state_monthly.csv` (the old `scale_out` carried
   the same number with $\mu_0$ folded in; **this model keeps the factors
   separate**).
-- **Uniquely determined even for states with sparse traffic** (MT, DE):
-  the total outflow is never zero where data exists.
+- **Uniquely determined even for states with sparse traffic:** MT's Jan-2020
+  total outbound is nonzero (≈ 183 k/month) so it is well defined.  If a
+  state has **no Jan-2020 outflow at all** (e.g. DE's BTS row is missing
+  for 2020-01 ⇒ outbound = 0), then $\mu_{0,i} = 0$ and the model sets its
+  scale to zero too ($s_i\equiv 0$, `calibrate_mobility`): such a state has
+  no outbound coupling. "Zero where data exists" applies to later months;
+  a missing month out of all of them yields $s_i(t)=0$ for that month.
 
 **Units.** All rates are per day: $\beta,\sigma,\gamma$ in d⁻¹, $W_{ij}(t)$
 in travellers/day, $F_{ij}(t)$ in travellers/month (convert with
@@ -172,7 +195,7 @@ $b_N$, $b_d$, per-state $\mu_{0,i}$, per-month $s_i(t)$).
 | $k$ | degree (number of contacts) |
 | $P(k)$ | degree distribution (exponential-cutoff power law) |
 | $\langle k \rangle$ | mean degree |
-| $\theta$ | dimensionless edge-to-infection probability, $[0,1]$ (→1 iff whole pop. infectious) |
+| $\theta$ | dimensionless edge-to-infection probability, $[0,1]$ — **fraction of infectious stubs** $\frac{1}{N\langle k\rangle}\sum_k k\, I_k$ (degree-weighted; →1 iff whole pop. infectious) |
 | $S_{ik}, E_{ik}, I_{ik}, R_{ik}$ | degree-class compartments, **counts** (per state $i$, class $k$) |
 | $\beta$ | infection rate per contact (per day) |
 | $\sigma$ | latent → infectious rate (per day) |
@@ -182,6 +205,7 @@ $b_N$, $b_d$, per-state $\mu_{0,i}$, per-month $s_i(t)$).
 | $d_{ij}$ | distance between states (or city hubs) |
 | $W_{ij}^{\text{gravity}}$ | gravity kernel, pop × distance, row-normalised |
 | $b_N, b_d$ | data-calibrated kernel exponents (PPML), $b_N\approx1.0$, $b_d\approx0.55$ |
+| $R_0$ | basic reproduction number $= \beta\langle k^2\rangle/\big(\gamma\,\langle k\rangle\big)$ for the heterogeneous kernel |
 | $\mu_{0,i}$ | per-state baseline mobility (travellers/day) |
 | $s_i(t)$ | per-state monthly mobility scale (dimensionless), $s_i(\text{Jan-2020})=1$ |
 | $F_{ij}(t)$ | observed state→state passenger flow (travellers/month) |
@@ -198,19 +222,22 @@ $b_N$, $b_d$, per-state $\mu_{0,i}$, per-month $s_i(t)$).
    $\langle k\rangle_i = \langle k\rangle_0\,(\text{dens}_i /
    \text{dens}_0)^{\xi}$, keeping one global shape
    $P(k)\propto k^{-\alpha}e^{-k/k_c}$ and adjusting it to match
-   $\langle k\rangle_i$ (fallback while estimating: one constant global
-   distribution $\langle k\rangle = 6$, $\alpha = 3$, $k_c$ large, matching
-   the BA ensemble of notebook 04).
+   $\langle k\rangle_i$. **Implemented fallback** (notebook 08): one global
+   distribution $\langle k\rangle = 6$ over $k = 3\dots 200$ with exponential
+   cutoff $k_c = 1000$; $\alpha$ is **solved** numerically so that
+   $\langle k\rangle = 6$, giving $\alpha \approx 2.659$ (ρ and the
+   density-scaling constants $\langle k\rangle_0, \xi$ remain open).
 2. **Class coupling:** inflow into degree class $k$ of a state comes from
    **all other states' travellers who also belong to class $k$** — i.e. the
    coupling acts in parallel on each class, and a person's degree is
    conserved when they move (no re-mixing across classes).
 3. **Mobility decomposition:** $s(t)$ is **per state** ($s_i(t)$); $\mu_{0,i}$
    is a **per-state constant**. Both are solved with the residue trick (§4):
-   fix $s=1$ in Jan-2020 ⇒ $\mu_{0,i} = \sum_j F_{ij}(\text{Jan-2020})/T_{\text{mo}}$
+   fix $s=1$ in Jan-2020 ⇒ $\mu_{0,i} = \sum_{j\ne i} F_{ij}(\text{Jan-2020})/T_{\text{mo}}$
    (the state's total Jan-2020 outbound **per day**, since gravity is
    row-normalised); later months
-   $s_i(t) = \sum_j F_{ij}(t)/\sum_j F_{ij}(\text{Jan-2020})$.
+   $s_i(t) = \sum_{j\ne i} F_{ij}(t)/\sum_{j\ne i} F_{ij}(\text{Jan-2020})$.
+   Sums exclude intra-state self-flows ($j\ne i$), matching decision 5.
 4. **Node set:** run on the **56 NYT/BTS jurisdictions** (50 states + DC +
    PR + GU + VI + MP + AS) **if information is sufficient — no
    extrapolation**: a jurisdiction without real data is **excluded**, never
@@ -219,20 +246,39 @@ $b_N$, $b_d$, per-state $\mu_{0,i}$, per-month $s_i(t)$).
    **total-outflow / gravity-row-sum** ratio converted to daily units (with
    row-normalised gravity, the state's total Jan-2020 outbound ÷
    $T_{\text{mo}}=30.44$ d), giving a unique and self-consistent constant:
-   $$\mu_{0,i} = \frac{\sum_j F_{ij}(\text{Jan-2020})}{T_{\text{mo}}\sum_j W_{ij}^{\text{gravity}}},$$
-   and $s_i(t) = \sum_j F_{ij}(t)/\sum_j F_{ij}(\text{Jan-2020})$.
-   This makes the model's total outbound from $i$ exactly match the
-   observed total **per day** in every month (§4).
+    $$\mu_{0,i} = \frac{\sum_{j\ne i} F_{ij}(\text{Jan-2020})}{T_{\text{mo}}\sum_j W_{ij}^{\text{gravity}}},$$
+    and $s_i(t) = \sum_{j\ne i} F_{ij}(t)/\sum_{j\ne i} F_{ij}(\text{Jan-2020})$.
+    This makes the model's total outbound from $i$ exactly match the
+    observed total **per day** in every month (§4).  Sums exclude intra-state
+    self-flows ($j\ne i$) — BTS reports them for several states; the
+    coupling is inter-state only.
 6. **Gravity kernel (data-calibrated):** the classic $\sqrt{N_i N_j}/d^{\alpha}$
-   (Viboud 2006) is replaced by a kernel whose exponents are estimated from
-   the BTS T-100 panel (PPML, origin + month FE): $b_N \approx 1.00$,
-   $b_d \approx 0.55$, i.e.
-   $$W_{ij}^{\text{gravity}} \propto \frac{N_j^{b_N}}{d_{ij}^{b_d}},$$
-   row-normalised.  Classic form kept as an option for sensitivity.
-   Validation of the assumption "temporally calibrated gravity is right":
-   `scripts/gravity_validation.py`; the calibrated kernel lifts pooled
-   outbound-share correlation from Pearson 0.35 / Spearman 0.46 (classic)
-   to Pearson 0.45 / Spearman 0.58.
+    (Viboud 2006) is replaced by a kernel whose exponents are estimated from
+    the BTS T-100 panel (PPML, origin + month FE): $b_N \approx 1.00$,
+    $b_d \approx 0.55$, i.e.
+    $$W_{ij}^{\text{gravity}} \propto \frac{N_j^{b_N}}{d_{ij}^{b_d}},$$
+    row-normalised (origin factor $N_i^\eta$ cancels in shares).  Classic
+    form kept as an option for sensitivity.
+    Validation of the assumption "temporally calibrated gravity is right":
+    `scripts/gravity_validation.py`; the calibrated kernel lifts pooled
+    outbound-share correlation from Pearson 0.35 / Spearman 0.46 (classic)
+    to Pearson 0.45 / Spearman 0.58.
+7. **$\theta$ (force of infection) — stub-fraction form** (amended
+    2026-08-06): $\theta_i = (\sum_k k\, I_{ik})/(N_i \langle k\rangle)$,
+    i.e. the fraction of infectious stubs, degree-weighted not
+    population-weighted.  The $P(k)$-weighted mixed form is subcritical
+    (decays even for $R_0>1$, §2) — this was the 2026-08-06 notebook-08 bug.
+8. **Per-state β, R₀-capped** (2026-08-06): fit $r_i$ = log-linear slope of
+    7-day-smoothed reported new-cases over 2020-03-01 → 2020-03-30, then
+    $$\beta_i = \frac{(r_i+\gamma)(r_i+\sigma)}{\sigma}\,
+    \frac{\langle k \rangle}{\langle k^2\rangle}$$
+    (inverting the SEIR growth equation for the heterogeneous kernel —
+    equivalent to $R_0 = \beta\langle k^2\rangle/\langle k\rangle/\gamma$).
+    Slope fits are reporting-fraction-invariant.  March-2020 growth is
+    inflated by the testing ramp-up (raw fits give $R_0 \approx 6$–$10$),
+    so β is capped at $R_0 = 4$:
+    $\beta_i \leftarrow \min\big(\beta_i,\ 4\gamma\langle k\rangle/\langle k^2\rangle\big)$;
+    states without a usable window fall back to the national median β.
 
 **Still open (resolve during implementation):**
 
@@ -269,20 +315,22 @@ $$\frac{dS_{ik}}{dt} = -\beta\, k\, S_{ik}\, \theta_i,\qquad
 \frac{dI_{ik}}{dt} = \sigma\, E_{ik} - \gamma\, I_{ik},\qquad
 \frac{dR_{ik}}{dt} = \gamma\, I_{ik}$$
 
-$$\theta_i = \frac{1}{\langle k \rangle_i}\sum_k k\, P_i(k)\, \frac{I_{ik}}{N_i}$$
+$$\theta_i = \frac{\sum_k k\, I_{ik}}{N_i\,\langle k \rangle_i}$$
 
-(the $I_{ik}$ here are **counts**; the within-state form in §2 uses the
-equivalent fractional notation where $I_k$ is a per-class fraction — both
-give the same dimensionless $\theta \in [0,1]$.)
+(the $I_{ik}$ here are **counts**; with class-conditional prevalence
+$i_k = I_{ik}/(N_i P_i(k))$ the identical form is $\theta_i =
+\frac{1}{\langle k\rangle_i}\sum_k k\, P_i(k)\, i_k$.  The mixed
+$\frac{1}{\langle k\rangle_i}\sum_k k P_i(k) I_{ik}/N_i$ is **wrong** —
+subcritical, fixed 2026-08-06.)
 
 - **Degree distribution** $P_i(k)$: per-state shape via a **density proxy**
   — scale $\langle k\rangle_i$ with census population density,
   $\langle k\rangle_i = \langle k\rangle_0\,(\text{dens}_i /
   \text{dens}_0)^{\xi}$, around the exponential-cutoff power law
   $P(k)\propto k^{-\alpha}e^{-k/k_c}$ from notebook 04; while the scaling
-  constants are unset, use one constant global distribution
-  ($\langle k\rangle = 6$, $\alpha = 3$, $k_c$ large, the notebook-04 BA
-  ensemble).
+  constants are unset, use one constant global distribution:
+  $\langle k\rangle = 6$ over $k = 3\dots200$, $k_c = 1000$, $\alpha$
+  solved so $\langle k\rangle = 6$ ⇒ $\alpha \approx 2.659$.
 - **Only infectious individuals transmit; exposed do not.** $\theta_i$ is a
   dimensionless edge-to-infection probability in $[0,1]$ (→ 1 only when the
   whole population is infectious; → 0 pre-pandemic).  The pre-pandemic
@@ -332,13 +380,25 @@ per-state baseline mobility is the total-outflow / gravity-row-sum ratio in
 **daily** units (equal to the total Jan-2020 outbound ÷ $T_{\text{mo}}$,
 gravity being row-normalised):
 
-$$\mu_{0,i} = \frac{\sum_j F_{ij}(\text{Jan-2020})}{T_{\text{mo}}\sum_j W_{ij}^{\text{gravity}}}
-           = \frac{\sum_j F_{ij}(\text{Jan-2020})}{T_{\text{mo}}},$$
+$$\mu_{0,i} = \frac{\sum_{j\ne i} F_{ij}(\text{Jan-2020})}{T_{\text{mo}}\sum_j W_{ij}^{\text{gravity}}}
+           = \frac{\sum_{j\ne i} F_{ij}(\text{Jan-2020})}{T_{\text{mo}}},$$
 
 and each later month's scale is that state's total outflow relative to its
-own baseline:
+own baseline (sums again $j\ne i$):
 
-$$s_i(t) = \frac{\sum_j F_{ij}(t)}{\sum_j F_{ij}(\text{Jan-2020})}.$$
+$$s_i(t) = \frac{\sum_{j\ne i} F_{ij}(t)}{\sum_{j\ne i} F_{ij}(\text{Jan-2020})}.$$
+
+**Per-state transmission (2026-08-06).** $\beta_i$ comes from the early
+growth slope $r_i$ (log-linear fit of 7-day-smoothed new cases,
+2020-03-01 → 2020-03-30):
+
+$$\beta_i = \frac{(r_i+\gamma)(r_i+\sigma)}{\sigma}\,
+\frac{\langle k \rangle}{\langle k^2\rangle},$$
+
+equivalent to $R_0 = \beta \langle k^2\rangle / \langle k\rangle / \gamma$.
+Slope fits are reporting-fraction-invariant; β is capped at $R_0 = 4$ to
+remove testing-ramp inflation (§6 decision 8); no usable window → national
+median β.
 
 This makes the model's total outbound from each state exactly match the
 observed total in every month (consistent with the per-state outbound
@@ -348,7 +408,7 @@ the best parameters (kernel exponents $b_N$, $b_d$; per-state $\mu_{0,i}$;
 per-month $s_i(t)$).
 
 **5. Data requirements.** Real census populations for all 56 jurisdictions
-(51 are already in `metapopulation.py`; census data for PR/GU/VI/MP/AS
-must be added). **No extrapolation** — jurisdictions without real data are
-excluded, never filled in. NYT and BTS both cover 56 jurisdictions and can
-be aligned by abbreviation mapping (confirmed).
+(2020 Census; already in `fused_metapopulation.py` `CENSUS_POPULATIONS`).
+**No extrapolation** — jurisdictions without real data are excluded, never
+filled in. NYT and BTS both cover 56 jurisdictions and are aligned by
+abbreviation mapping (done).
