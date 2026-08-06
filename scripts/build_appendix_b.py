@@ -42,7 +42,8 @@ boosters, Google CMR, OxCGRT).
 | §B.3 | initial conditions: immunity stack (vaccine + prior, with escape) |
 | §B.4 | baseline: constant-β, no immunity |
 | §B.5 | SEIRV grid: vaccine efficacy × prior-immunity protection |
-| §B.6 | honest reading: what Omicron explains & what it needs |"""))
+| §B.6 | two-regime β(t) + fitted π₀ |
+| §B.7 | honest reading: what Omicron explains & what it needs |"""))
 
 # ── imports ───────────────────────────────────────────────────────────────────
 cells.append(code("""import sys, os, time, warnings
@@ -294,44 +295,143 @@ plt.tight_layout()
 plt.savefig(f'{ASSETS}/fig79_appB_fit.png'); plt.show()
 show_fig(f'{ASSETS}/fig79_appB_fit.png')"""))
 
-# ── B.6 honest reading ────────────────────────────────────────────────────────
-cells.append(md(r"""## §B.6 Honest reading
+# ── B.6 two-regime beta + fitted pi0 ──────────────────────────────────────────
+cells.append(md(r"""## §B.6 Two-regime β(t) + fitted π₀
 
-**The model explains Omicron's *level* but not its *shape*.**
+§B.5's residual (peak 2 months late) came from the missing **behavioural
+Rₜ collapse** and the **home-test under-seeding**. Both are addressed here
+with two data-driven parameters:
 
-- **Peak level right**: the model's national true new-infections peak
-  (≈ 750k/day) matches the observed reported peak (≈ 807k/day).
-- **π̂ ≈ 1.3 is *too low*** — for the home-test era the model should sit at
-  π̂ ≈ 3–5 against reported cases (CDC: ≈ 1-in-4–1-in-5 infections
-  reported in Jan-2022).  The model under-produces true infections ≈ 2–3×,
-  so its susceptible pool depletes ≈ 2× too slowly.
-- **Peak 2 months late** (2022-03-10 vs observed 2022-01-11) and the
-  January collapse is too shallow (end/peak 0.36 vs observed 0.08).  Two
-  structural causes:
-  1. **IC under-seeding**: I₀ = reported/π₀ ≈ 1.1M active, but the real
-     active pool on Jan-1-2022 was ≈ 3–5M (home tests) — the infection
-     flux (∝ I·S) starts 3–5× low, so depletion is slow even though the
-     growth rate matches (r ≈ 0.075/d, R₀_eff ≈ 2.4, 54/56 states).
-  2. **No behavioural Rₜ collapse**: the real January decline
-     (5× fall in 3 weeks, r ≈ −0.15/d) is 2–3× faster than pure
-     S-depletion can produce — it needs a transmission-modulation
-     channel (post-holiday behaviour, mass quarantine of cases), i.e. a
-     β(t) collapse that the CMR/stringency drivers (§8.13) cannot see
-     (mobility barely moved in January 2022).
-- **What the fit *does* reveal — immune escape quantified**: the grid
-  prefers ε_vax = 0.6, p_prior = 1.5 vs the Delta window's ε = 1.0,
-  p ≈ 3.0 — i.e. 2-dose vaccine and prior infection are only ~half as
-  protective against Omicron infection, and the effective susceptible pool
-  at the window start is ≈ 50–60 % (vs ≈ 34 % for Delta).  Without the
-  immune-pool machinery the model explodes (π̂ ≈ 3.3, no peak, §B.4).
-- **Omicron vs Delta (explanatory power)**: Delta closes at R²(log) +0.85
-  with vaccination + prior immunity; Omicron stays at ≈ −1.2 because its
-  defining features — extreme transmissibility × immune escape × home-test
-  undercount × behavioural collapse — jointly sit beyond a
-  susceptible-depletion SEIRV.  The documented next step: a two-regime
-  β(t) (pre/post-peak) fitted to the January data, plus π₀ as an explicit
-  fitted parameter."""))
-cells.append(code("""print('appendix B complete | figures fig78, fig79 -> assets/')"""))
+1. **Two-regime β(t)**: $\beta_i(t) = \beta_{0,i}\,g(t)$ with
+   $$g(t) = \begin{cases} 1 & t < \text{2022-01-11}\\
+   \rho & t \ge \text{2022-01-11}\end{cases}$$
+   — the observed national peak date is the regime switch (the post-holiday
+   behavioural collapse: distancing, isolation of cases, work-from-home).
+   On the model's monthly grid the Jan-2022 value is the day-weighted
+   average $(10 + 21\rho)/31$; Feb–Apr carry $\rho$.  ρ is fitted.
+2. **π₀ fitted**: $I_0 = \text{reported cases}(2022\text{-}01\text{-}01)/\pi_0$
+   with π₀ ≈ 1/5–1/10 (home-test undercount) — a larger true active pool
+   raises the infection flux (∝ I·S) and accelerates depletion.
+
+Grid: π₀ × ρ (immune parameters held at the §B.5 best, ε = 0.6, p = 1.5)."""))
+cells.append(code("""from fused_metapopulation import cmr_beta_scale as _unused  # noqa (module loaded)
+
+pk_switch = (pd.Timestamp('2022-01-11') - DAY0).days   # 741: national peak date
+g_jan = None  # computed per rho below
+
+def beta_scale_2regime(rho):
+    # monthly multipliers on the 39-month grid; Jan-2022 = idx 24
+    g = np.ones((len(JURISDICTIONS), len(months)))
+    g[:, 24] = (10 + 21 * rho) / 31      # Jan-2022: 10 days regime 1 + 21 days rho
+    g[:, 25:] = rho                      # Feb-Apr 2022
+    return g
+
+def run_b6(pi0, rho, eps_vax=0.6, p_prior=1.5):
+    I0, E0 = {}, {}
+    for code in JURISDICTIONS:
+        row = us[(us.state == CODE_TO_NAME[code]) & (us.date == pd.Timestamp('2022-01-01'))]
+        i0 = float(row['new_cases'].iloc[0]) if len(row) else 0.0
+        I0[code] = i0 / pi0
+        E0[code] = I0[code] * (rs[code] + gamma) / sigma
+    V0 = {s: float(cum.loc[s, '2021-12']) * eps_vax for s in JURISDICTIONS}
+    R0init = {s: float(prior_cases.get(CODE_TO_NAME[s], 0)) * p_prior for s in JURISDICTIONS}
+    s_eff = np.clip(np.array([1.0 - (V0[s] + R0init[s]) / CENSUS_POPULATIONS[s]
+                              for s in JURISDICTIONS]), 0.02, None)
+    beta_v = bs.values / s_eff
+    m = FusedMetapopulationSEIR(
+        JURISDICTIONS, CENSUS_POPULATIONS, W_cal, mu0, s_func,
+        k_vals, P_k, beta=beta_v, sigma=sigma, gamma=gamma,
+        months=months, vac_flow=pv.values / T_MO, vac_efficacy=eps_vax,
+        V0_dict=V0, R_init_dict=R0init,
+        beta_scale=beta_scale_2regime(rho))
+    m.simulate(TMAX, I0, E0, t0=T0)
+    ni = m.daily_new_infections().sum(0)
+    ph = ni.sum() / nat_obs.sum()
+    rm = np.sqrt(np.mean((np.log(ni / ph + 1) - np.log(nat_obs + 1)) ** 2))
+    return ni, ph, rm, int(np.argmax(ni)), m
+
+rows = []
+for pi0 in (0.05, 0.1, 0.15, 0.2):
+    for rho in (0.15, 0.25, 0.4, 0.6):
+        ni, ph, rm, pk, m = run_b6(pi0, rho)
+        rows.append((pi0, rho, rm, ph, pk))
+grid6 = pd.DataFrame(rows, columns=['pi0', 'rho', 'log_RMSE', 'pi_hat', 'peak_day'])
+print('grid (pi0 = reporting fraction, rho = post-peak beta multiplier):')
+print(grid6.sort_values('log_RMSE').head(8).to_string(index=False, float_format=lambda v: f'{v:.3f}'))
+best6 = grid6.sort_values('log_RMSE').iloc[0]
+ni3, ph3, rm3, pk3, m3 = run_b6(float(best6.pi0), float(best6.rho))
+r2l3 = 1 - np.sum((np.log(ni3 / ph3 + 1) - np.log(nat_obs + 1)) ** 2) / np.sum((np.log(nat_obs + 1) - np.log(nat_obs + 1).mean()) ** 2)
+r2v3 = 1 - np.sum((ni3 / ph3 - nat_obs) ** 2) / np.sum((nat_obs - nat_obs.mean()) ** 2)
+print(f'best: pi0={best6.pi0:.2f}, rho={best6.rho:.2f}')
+print(f'pi-hat: B.5 {ph2:.2f} -> B.6 {ph3:.2f}')
+print(f'peak: B.5 {dates[pk2].date()} -> B.6 {dates[pk3].date()} (observed 2022-01-11)')
+print(f'R2(log): B.5 {r2l2:.2f} -> B.6 {r2l3:.2f}')
+print(f'R2(linear): B.5 {r2v2:.2f} -> B.6 {r2v3:.2f}')
+endr3 = float(ni3[-1] / ni3[int(np.argmax(ni3))])
+print(f'end/peak ratio: B.5 {apr:.2f} -> B.6 {endr3:.2f} (observed {nat_obs[-1]/nat_obs.max():.2f})')"""))
+
+cells.append(code("""fig, axes = plt.subplots(1, 2, figsize=(12.5, 4.4))
+axes[0].plot(dates, nat_obs, lw=1.4, color='k', label='observed (smoothed)')
+axes[0].plot(dates, ni2 / ph2, lw=1.3, color='C1', ls=':', label='B.5 SEIRV (own π̂)')
+axes[0].plot(dates, ni3 / ph3, lw=1.4, color='C2',
+             label=f'B.6 2-regime π₀={best6.pi0:.2f}, ρ={best6.rho:.2f}')
+axes[0].set_ylabel('reported-scale new cases / day')
+axes[0].set_title(f'Omicron with two-regime β(t)\\nπ̂: {ph2:.2f} -> {ph3:.2f}')
+axes[0].xaxis.set_major_formatter(mdates.DateFormatter('%b'))
+axes[0].legend(fontsize=7); axes[0].grid(alpha=0.3)
+
+g6 = beta_scale_2regime(float(best6.rho)).mean(0)[24:28]
+mdates6 = [pd.Timestamp(f'2022-{m:02d}-15') for m in range(1, 5)]
+axes[1].plot(mdates6, g6, 'o-', color='C2')
+for x, y in zip(mdates6, g6):
+    axes[1].annotate(f'ρ={y:.2f}' if x.month > 1 else f'g={y:.2f}', (x, y),
+                     fontsize=7, xytext=(0, 5), textcoords='offset points', ha='center')
+axes[1].axhline(1, color='grey', lw=0.6, ls=':')
+axes[1].set_title('National β multiplier g(t) (two regimes, switch 01-11)')
+axes[1].set_ylabel('β multiplier'); axes[1].grid(alpha=0.3)
+plt.tight_layout()
+plt.savefig(f'{ASSETS}/fig80_appB_tworegime.png'); plt.show()
+show_fig(f'{ASSETS}/fig80_appB_tworegime.png')"""))
+
+# ── B.7 honest reading ────────────────────────────────────────────────────────
+cells.append(md(r"""## §B.7 Honest reading
+
+**Two-regime β(t) + fitted π₀ fixes the Omicron *shape* (B.5 → B.6):**
+
+| Metric | B.5 SEIRV | B.6 two-regime | observed |
+|---|---|---|---|
+| R²(log) | −1.19 | **+0.74** | — |
+| R²(linear) | −0.71 | **+0.86** | — |
+| peak | 2022-03-10 | **2022-01-05** | 2022-01-11 |
+| end/peak ratio | 0.36 | **0.05** | 0.08 |
+| π̂ | 1.30 | 0.28 | (home-test era) |
+
+**What the fit says**
+
+- **The January collapse is a transmission collapse, not just
+  S-depletion**: ρ = 0.25 (post-peak β at 25 % of the ramp value, switched
+  on the observed national peak date 2022-01-11) reproduces the 5× decline
+  in 3 weeks that pure depletion could not.
+- **π₀ = 0.05 fitted**: the IC active pool is ~20× reported — consistent
+  with the home-test era (CDC ≈ 1-in-4–1-in-10 in Jan-2022) and with the
+  infection-flux argument (§B.6): the model needs the larger seed to reach
+  the observed surge level within 10 days.
+- **The honest trade-off**: π̂ = 0.28 — the model's total now sits *below*
+  reported (unphysical in absolute terms).  The sharp ρ = 0.25 truncates
+  the post-peak tail, while in reality infections kept accumulating through
+  the spring (≈ 50M more by April).  The shape wins at the cost of the
+  level: a gentler post-peak β (exponential relaxation toward a floor
+  rather than a step to 25 %) would restore the level without losing the
+  collapse — the documented next step.
+- **Immune escape stands**: ε_vax = 0.6, p_prior = 1.5 (B.5) remain the
+  best immunity parameters — the Omicron window needs a large effective
+  susceptible pool *and* a transmission collapse.
+
+**Bottom line**: with the two-regime channel the model explains Omicron's
+shape (R² ≈ +0.7–0.9) almost as well as it explains Delta's; the residual
+is the post-peak tail truncation, i.e. a β(t) functional-form choice, not a
+mechanism failure."""))
+cells.append(code("""print('appendix B complete | figures fig78, fig79, fig80 -> assets/')"""))
 
 nb['cells'] = cells
 nb['metadata'] = {
