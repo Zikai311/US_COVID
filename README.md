@@ -57,7 +57,7 @@ Finial_Project/
 │   ├── 03_network_sir.ipynb
 │   ├── 04_degree_based_sir.ipynb
 │   ├── 05_abm.ipynb
-│   ├── 06_covid_case_study.ipynb     # rewritten 2026-08-06: layperson walkthrough
+│   ├── 06_covid_case_study.ipynb     # rewritten 2026-08-06: layperson walkthrough (English)
 │   │                              #   of the final SEIRV model (build_nb06.py)
 │   ├── 07_data_analysis.ipynb        # data-only panels (no fitting)
 │   ├── 08_metapopulation.ipynb       # rebuilt 2026-08-06 (build_nb08.py)
