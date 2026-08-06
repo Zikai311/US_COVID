@@ -279,6 +279,21 @@ $b_N$, $b_d$, per-state $\mu_{0,i}$, per-month $s_i(t)$).
     so β is capped at $R_0 = 4$:
     $\beta_i \leftarrow \min\big(\beta_i,\ 4\gamma\langle k\rangle/\langle k^2\rangle\big)$;
     states without a usable window fall back to the national median β.
+9. **Pair-level mobility — saturated variant** (2026-08-06, experiment in
+    appendix A §A.9 / notebook 08 §8.12): `calibrate_mobility(pair_level=True)`
+    returns per-pair $\mu_{0,ij} = F_{ij}(\text{Jan-2020})/T_{\text{mo}}$ and
+    $s_{ij}(t) = F_{ij}(t)/F_{ij}(\text{Jan-2020})$, so
+    $W_{ij}(t) = \mu_{0,ij}\,s_{ij}(t)$ reproduces the observed flow tensor
+    **exactly** (one parameter per data point — a data replay, not a model;
+    pairs without a Jan-2020 baseline keep $s_{ij}\equiv 0$, same
+    no-extrapolation rule as state-level DE; non-baseline volume = 0.16 %).
+    Reconstruction R²(log): gravity 0.247 → +time-invariant pair factor
+    0.908 → full per-pair 1.000. `FusedMetapopulationSEIR(W_tensor=..., months=...)`
+    runs the saturated mode; the gravity path stays the default. Epidemic
+    sensitivity (notebook 08 §8.12): exact flows change national window
+    totals by ≈ −23 % and per-state onsets by ≈ +7 days vs gravity — the
+    mobility mode is material for seeding, so keep this in mind when
+    interpreting §8.8–§8.10.
 
 **Still open (resolve during implementation):**
 

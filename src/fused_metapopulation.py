@@ -266,7 +266,7 @@ def build_month_index():
     return months
 
 
-def calibrate_mobility(state_list=None, data_dir='../data'):
+def calibrate_mobility(state_list=None, data_dir='../data', pair_level=False):
     """
     From the BTS state→state monthly flows compute, per state:
       μ_{0,i}  : Jan-2020 outbound / T_mo           [travellers/day]
@@ -274,6 +274,14 @@ def calibrate_mobility(state_list=None, data_dir='../data'):
     Returns (mu0 array, s matrix (n × n_months), months, F_ij(t) (n×n×n_months)).
     Intra-state self-pairs (i == j) are excluded: they never leave the patch
     and W_ij couples distinct patches only.
+
+    pair_level=True (the "saturated" data-replay limit, used for the
+    per-pair mobility experiment) instead returns:
+      mu0_mat[i,j]   = F_ij(Jan-2020) / T_mo       [travellers/day]
+      s_tensor[i,j,t]= F_ij(t) / F_ij(Jan-2020)    [dimensionless]
+    (zero wherever the Jan-2020 baseline is zero), so that
+    W_ij(t) = mu0_mat[i,j]·s_tensor[i,j,t] reproduces the observed flow
+    tensor exactly — one parameter per data point, no gravity involved.
     """
     import os
     states = list(state_list or JURISDICTIONS)
@@ -291,6 +299,13 @@ def calibrate_mobility(state_list=None, data_dir='../data'):
         mi = month_idx.get((int(r['YEAR']), int(r['MONTH'])))
         if mi is not None:
             F[i, j, mi] += r['PASSENGERS']
+
+    if pair_level:
+        base = F[:, :, 0]
+        mu0_mat = base / T_MO
+        s_tensor = np.divide(F, base[:, :, None], out=np.zeros_like(F, dtype=float),
+                             where=base[:, :, None] > 0)
+        return mu0_mat, s_tensor, months, F
 
     out = F.sum(axis=1)                      # (n, n_months) total outbound/month
     out0 = out[:, 0]                          # Jan-2020
@@ -331,7 +346,7 @@ class FusedMetapopulationSEIR:
     """
 
     def __init__(self, state_list, populations, W_grav, mu0, s_func,
-                 k_vals, P_k, beta, sigma, gamma):
+                 k_vals, P_k, beta, sigma, gamma, W_tensor=None, months=None):
         self.states = list(state_list)
         self.n = len(self.states)
         self.idx = {s: i for i, s in enumerate(self.states)}
@@ -339,6 +354,10 @@ class FusedMetapopulationSEIR:
         self.W_grav = np.asarray(W_grav, dtype=float)
         self.mu0 = np.asarray(mu0, dtype=float)
         self.s_func = s_func
+        # saturated per-pair mode: W_ij(t) = W_tensor[i,j,month(t)] (daily),
+        # reproduces the observed flows exactly; overrides W_grav·μ0·s.
+        self.W_tensor = np.asarray(W_tensor, dtype=float) if W_tensor is not None else None
+        self.month_starts = self._build_month_starts(months)
         self.k = np.asarray(k_vals, dtype=float)
         self.P = np.asarray(P_k, dtype=float)
         self.K = len(self.k)
@@ -390,7 +409,26 @@ class FusedMetapopulationSEIR:
 
     # ── RHS ───────────────────────────────────────────────────────────────────
 
+    def _build_month_starts(self, months):
+        """Day indices (since 2020-01-01) of each month's first day."""
+        if not months:
+            return np.array([0])
+        starts = []
+        for y, m in months:
+            d = (pd.Timestamp(f'{y:04d}-{m:02d}-01') - pd.Timestamp('2020-01-01')).days
+            starts.append(d)
+        return np.array(starts)
+
+    def _month_index(self, t):
+        idx = 0
+        for i, ms in enumerate(self.month_starts):
+            if t >= ms:
+                idx = i
+        return idx
+
     def _W_at(self, t):
+        if self.W_tensor is not None:
+            return self.W_tensor[:, :, self._month_index(int(np.floor(t)))]
         s = self.s_func(t)
         return self.W_grav * (s * self.mu0)[:, None]  # (n,n), W_ij = s_i μ0_i W^grav
 

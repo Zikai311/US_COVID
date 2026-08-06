@@ -204,11 +204,11 @@ Individual-level simulation:
 ## Visualizations
 
 The project generates:
-- **45 figures in `assets/`** (currently fig29–fig73, dpi=300): epidemic
+- **47 figures in `assets/`** (currently fig29–fig75, dpi=300): epidemic
   dynamics, parameter sweeps, network structures, degree distributions,
   (notebook 08) gravity-kernel validation, per-state β estimates, national &
-  state fits, and spatial onset timing, plus (appendix A) the data-
-  reconstruction figures fig68–fig73
+  state fits, spatial onset timing, and mobility sensitivity, plus
+  (appendix A) the data-reconstruction figures fig68–fig74
 - **3-5 animations** of spreading processes (abm.py/network_sir.py)
 - Phase portraits, heatmaps, degree distributions
 
@@ -261,16 +261,18 @@ Optional:
 - [x] Notebook 08 metapopulation — **rebuilt 2026-08-06** with
       `src/fused_metapopulation.py` + `scripts/build_nb08.py`
       (56 jurisdictions, 2020-01→2023-03 BTS mobility, calibrated gravity
-      kernel, per-state β with R₀≤4 cap, ~44k-ODE coupled degree-SEIR)
+      kernel, per-state β with R₀≤4 cap, ~44k-ODE coupled degree-SEIR,
+      §8.12 mobility sensitivity vs saturated per-pair flows)
 - [x] Appendix A — gravity data-reconstruction report
       (`notebooks/appendix_A.ipynb`, `scripts/build_appendix_a.py`):
       calibrated gravity model vs raw BTS T-100 flows, all validation tests
-      of `scripts/gravity_validation.py` re-run on the PPML-calibrated kernel
+      of `scripts/gravity_validation.py` re-run on the PPML-calibrated kernel,
+      plus the saturated per-pair mobility experiment (§A.9)
 - [x] Gravity-kernel validation (`scripts/gravity_validation.py`)
 
 ### Estimated Completion
 - Complete: all planned notebooks and modules build and execute
-- Figures: 45 in `assets/` (fig29–fig73)
+- Figures: 47 in `assets/` (fig29–fig75)
 
 ---
 

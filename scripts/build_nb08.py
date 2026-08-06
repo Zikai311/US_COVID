@@ -524,7 +524,72 @@ cells.append(md(r"""## §8.11 Discussion & limitations
 7. **$I_0$ proxy** — reported new cases on 2020-03-01 back-scaled by an
    assumed early-reporting π₀ = 0.1 (§8.6); a lower bound for the true
    active pool, and E₀ follows from the early-growth balance."""))
-cells.append(code("""print('notebook 08 rebuild complete | figures fig59..fig67 -> assets/')"""))
+cells.append(md(r"""## §8.12 Mobility sensitivity — saturated per-pair weights (experiment)
+
+The mobility input can be replaced by the **observed per-pair flows**
+(`calibrate_mobility(pair_level=True)`): $W_{ij}(t) = \mu_{0,ij}\,s_{ij}(t)$
+reproduces the BTS tensor exactly (data replay — the saturated limit,
+appendix A §A.9; pairs without a Jan-2020 baseline are never coupled, same
+rule as DE). Does the *epidemic* change when the gravity kernel is swapped
+for the exact flows? Run the identical simulation (same β, I₀, E₀) under
+both mobility modes."""))
+cells.append(code("""mu0_mat, s_tensor, months2, F2 = calibrate_mobility(JURISDICTIONS, data_dir='../data', pair_level=True)
+W_pair = mu0_mat[:, :, None] * s_tensor                  # daily travellers, n×n×T
+base = F2[:, :, 0] > 0
+print('pair-level: exact on baseline pairs:',
+      np.allclose((W_pair * T_MO)[base], F2[base], atol=1e-6),
+      '| non-baseline pair volume: %.3f%%' % (100 * F2[~base].sum() / F2.sum()))
+
+model_pair = FusedMetapopulationSEIR(
+    JURISDICTIONS, CENSUS_POPULATIONS, W_cal, mu0, s_func,
+    k_vals, P_k, beta=bs.values, sigma=sigma, gamma=gamma,
+    W_tensor=W_pair, months=months2)
+t2, y2 = model_pair.simulate(TMAX, I0, E0, t0=T0)
+new_inf2 = model_pair.daily_new_infections()
+nat2 = new_inf2.sum(0)
+print(f'national window total: gravity {new_inf.sum():,.0f} | pair {nat2.sum():,.0f} '
+      f'({100*(nat2.sum()/new_inf.sum()-1):+.2f}%)')
+print(f'national peak day: gravity {t_sol[int(np.argmax(new_inf.sum(0)))]:.0f} '
+      f'| pair {t2[int(np.argmax(nat2))]:.0f}')
+
+def onset_days(ni_mat, ts):
+    ons = []
+    for i in range(model.n):
+        ni = ni_mat[i]
+        pk = ni.max()
+        if pk <= 0:
+            ons.append(np.nan)
+            continue
+        idx = int(np.argmax(ni >= 0.1 * pk))
+        ons.append(ts[idx] - T0)
+    return np.array(ons)
+
+ons_g = onset_days(new_inf, t_sol)
+ons_p = onset_days(new_inf2, t2)
+d = ons_p - ons_g
+d = d[np.isfinite(d)]
+print(f'per-state onset shift (pair - gravity): median {np.median(d):+.1f} d | '
+      f'IQR [{np.percentile(d, 25):+.1f}, {np.percentile(d, 75):+.1f}] | '
+      f'|shift|>2 d: {np.mean(np.abs(d) > 2) * 100:.0f}% of states')"""))
+
+cells.append(code("""fig, axes = plt.subplots(1, 2, figsize=(12, 4.3))
+axes[0].plot(t_sol, new_inf.sum(0) / 1e3, lw=1.2, color='C0', label='gravity kernel')
+axes[0].plot(t2, nat2 / 1e3, lw=1.2, color='C3', ls='--', label='per-pair (data replay)')
+axes[0].set_xlabel('day since 2020-01-01'); axes[0].set_ylabel('true new infections (k/day)')
+axes[0].set_title('National new infections: gravity vs exact flows')
+axes[0].legend(fontsize=8); axes[0].grid(alpha=0.3)
+m = np.isfinite(ons_g) & np.isfinite(ons_p)
+axes[1].scatter(ons_g[m], ons_p[m], s=20, alpha=0.7, color='C6')
+lo, hi = min(ons_g[m].min(), ons_p[m].min()), max(ons_g[m].max(), ons_p[m].max())
+axes[1].plot([lo, hi], [lo, hi], 'k--', lw=0.8)
+axes[1].set_xlabel('onset day (gravity), days since Mar 1')
+axes[1].set_ylabel('onset day (per-pair flows)')
+axes[1].set_title('Per-state onset: mobility mode barely matters')
+axes[1].grid(alpha=0.3)
+plt.tight_layout()
+plt.savefig(f'{ASSETS}/fig75_mobility_sensitivity.png'); plt.show()
+show_fig(f'{ASSETS}/fig75_mobility_sensitivity.png')"""))
+cells.append(code("""print('notebook 08 rebuild complete | figures fig59..fig67 + fig75 -> assets/')"""))
 
 nb['cells'] = cells
 nb['metadata'] = {

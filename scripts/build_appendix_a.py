@@ -52,7 +52,8 @@ inbound (which is not calibrated at all).
 | §A.6 | [D] uniform temporal scaling |
 | §A.7 | [E] inbound cross-sectional · [F] inbound time series |
 | §A.8 | [H] robustness: contiguous-49 subset |
-| §A.9 | reconstruction summary & limitations |"""))
+| §A.9 | [I] pair-level mobility: the saturated limit |
+| §A.10 | reconstruction summary & limitations |"""))
 
 # ── 0. imports ────────────────────────────────────────────────────────────────
 cells.append(code("""import os, sys, warnings
@@ -510,8 +511,89 @@ print(f'contiguous-49 pooled: Pearson = {pear(a, b):.4f} | Spearman = '
       f'{spear(a, b):.4f} | N = {len(a):,}')
 print('(full-56 reference: Pearson = 0.45, §A.4)')"""))
 
-# ── A.9 summary ───────────────────────────────────────────────────────────────
-cells.append(md(r"""## §A.9 Reconstruction summary & limitations
+# ── A.9 pair-level saturated ─────────────────────────────────────────────────
+cells.append(md(r"""## §A.9 [I] Pair-level mobility — the *saturated* limit
+
+"Give every pair its own μ and s" is the limit of this experiment:
+
+$$W_{ij}(t) = \mu_{0,ij}\, s_{ij}(t),
+\qquad
+\mu_{0,ij} = \frac{F_{ij}(\text{Jan-2020})}{T_{\text{mo}}},
+\qquad
+s_{ij}(t) = \frac{F_{ij}(t)}{F_{ij}(\text{Jan-2020})}
+\qquad
+\Rightarrow \quad W_{ij}(t)\,T_{\text{mo}} = F_{ij}(t)
+\ \text{exactly}$$
+
+One parameter per observed data point — the model becomes a **replay of the
+data** (pairs with no Jan-2020 baseline keep $s_{ij}\equiv 0$, same
+no-extrapolation rule as state-level DE). For reference we also show the
+middle ground: a **time-invariant pair factor** $\mu_{0,ij}$ (fitted as the
+mean log residual of the gravity prediction) while keeping the shared
+per-state temporal scaling $s_i(t)$.
+
+| Mode | R²(log) | Parameters |
+|---|---|---|
+| gravity kernel + per-state $\mu_{0,i}, s_i(t)$ (§A.5) | 0.247 | ~200 |
+| + time-invariant pair factor $\mu_{0,ij}$ (per-state $s_i(t)$) | 0.908 | +3,080 |
+| full per-pair $\mu_{0,ij}\cdot s_{ij}(t)$ | 1.000 (by construction) | ~62,000 ≈ data points |
+
+**Honest reading.** The saturated column is *not* a better model — it is the
+data itself. The gravity model's value is that ~200 parameters predict the
+directional structure from population + distance; the pair-level versions
+memorise it. The interesting middle ground is the time-invariant pair factor
+(0.25 → 0.91): it lets each corridor keep its own baseline weight while the
+*temporal* evolution stays a per-state scale, so the model still generalises
+to months not in the training window. The pair-level residual that the
+saturated model absorbs is shown below — it is large (median ×2.6 miss) but
+idiosyncratic, not explained by distance (corr ≈ 0)."""))
+cells.append(code("""from fused_metapopulation import calibrate_mobility as _cm
+
+mu0_mat, s_tensor, months2, F2 = _cm(states, data_dir='../data', pair_level=True)
+W_pair = mu0_mat[:, :, None] * s_tensor            # daily, n×n×T
+base = F2[:, :, 0] > 0
+print(f'pairs with a Jan-2020 baseline: {int(base.sum())}/{base.size}')
+print(f'reconstruction exact on baseline pairs: '
+      f'{np.allclose((W_pair * T_MO)[base], F2[base], atol=1e-6)}')
+print(f'flow on non-baseline pairs (never coupled, same rule as DE): '
+      f'{100 * F2[~base].sum() / F2.sum():.3f}% of total volume')
+
+# middle ground: time-invariant pair factor on top of the gravity prediction
+logF = np.log(np.maximum(F, 1e-12))
+logP = np.log(np.maximum(pred, 1e-12))
+mask = (F > 0) & (pred > 0) & active[:, None, None]
+pair_res = np.zeros((n, n))
+for i in np.where(active)[0]:
+    for j in range(n):
+        sel = mask[i, j, :]
+        if sel.sum() > 0:
+            pair_res[i, j] = np.mean(logF[i, j, sel] - logP[i, j, sel])
+lp2 = np.where(mask, logP + pair_res[:, :, None], np.nan)
+ly = logF[mask]
+ss_tot = np.sum((ly - ly.mean()) ** 2)
+r2_grav = 1 - np.sum((logF[mask] - logP[mask]) ** 2) / ss_tot
+r2_pair0 = 1 - np.sum((logF[mask] - lp2[mask]) ** 2) / ss_tot
+print(f'R2(log): gravity = {r2_grav:.3f} | + time-invariant pair factor = '
+      f'{r2_pair0:.3f} | full per-pair s_ij(t) = 1.000 (exact, saturated)')"""))
+
+cells.append(code("""# the residual that pair-level mobility absorbs: log2 delta_ij(t)
+delta = np.where(mask, F / np.maximum(pred, 1e-12), np.nan)
+ld = np.log2(delta[mask])
+fig, ax = plt.subplots(figsize=(7.5, 4.5))
+ax.hist(ld, bins=90, color='C6', alpha=0.85)
+for q, ls, lab in ((25, '--', 'Q1'), (50, '-', 'median'), (75, '--', 'Q3')):
+    ax.axvline(np.percentile(ld, q), color='k', ls=ls, lw=1,
+               label=f'{lab} = {np.percentile(ld, q):.2f}')
+ax.set_xlabel('log2 [ F_ij / (s_i mu0_i W_ij T_mo) ]  (pair-month residual)')
+ax.set_ylabel('count')
+ax.set_title('Pair-level residual of the gravity model — what per-pair mobility absorbs')
+ax.legend(fontsize=8); ax.grid(alpha=0.3)
+plt.tight_layout()
+plt.savefig(f'{ASSETS}/fig74_appA_pair_residuals.png'); plt.show()
+show_fig(f'{ASSETS}/fig74_appA_pair_residuals.png')"""))
+
+# ── A.10 summary ─────────────────────────────────────────────────────────────
+cells.append(md(r"""## §A.10 Reconstruction summary & limitations
 
 **Does the calibrated gravity model reproduce the BTS aviation flows?**
 The numbers separate cleanly into a strong temporal half and a moderate
@@ -529,6 +611,7 @@ spatial half:
 | inbound (uncalibrated), cross-sectional | median **0.83** per month |
 | inbound (uncalibrated), time series | median **0.98** (shares the COVID trend) |
 | contiguous-49 robustness | P **0.56** |
+| pair-level (saturated, §A.9) | R²(log) **1.000** by construction — data replay, not a model; middle ground (time-invariant pair factor) **0.91** |
 
 **Interpretation.** Population and distance alone (plus per-state totals)
 recover the *rank order* of the directional structure and almost all of the
@@ -569,6 +652,7 @@ summary = pd.DataFrame({
         'inbound cross-sectional median', 'inbound time-series median',
         'kernel exponents (PPML)',
         'contiguous-49 P',
+        'pair-level R2 (saturated, §A.9)',
     ],
     'value': [
         '%.1e' % np.max(err[active] / np.maximum(out[active], 1)),
@@ -584,11 +668,12 @@ summary = pd.DataFrame({
         '%.3f' % np.median(r_cs), '%.3f' % np.median(rv_arr),
         'b_N=%.3f, b_d=%.3f' % (b_N, b_d),
         '%.3f' % pear(a49, b49),
+        '1.000 (data replay); pair-mu0 middle ground %.2f' % r2_pair0,
     ],
 })
 from IPython.display import display
 display(summary)
-print('appendix A complete | figures fig68..fig73 -> assets/')"""))
+print('appendix A complete | figures fig68..fig74 -> assets/')"""))
 
 nb['cells'] = cells
 nb['metadata'] = {
