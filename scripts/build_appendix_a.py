@@ -2,8 +2,10 @@
 reconstruction experiment for the temporal calibrated gravity model vs the
 raw BTS T-100 state->state monthly flows (reuses the tests of
 scripts/gravity_validation.py, re-run on the current calibrated-kernel model
-with PPML exponents). Edit this script, not the .ipynb."""
-import json, os, nbformat as nbf
+with PPML exponents). The classic sqrt(NiNj)/d^2 kernel was removed 2026-08-06
+on user request — only the calibrated kernel is analysed here.
+Edit this script, not the .ipynb."""
+import os, nbformat as nbf
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -16,10 +18,10 @@ code = nbf.v4.new_code_cell
 cells.append(md(r"""# Appendix A — Data Reconstruction: Does the Gravity Model Reproduce US Aviation Flows?
 
 **Built 2026-08-06** on top of the fused metapopulation model of notebook 08
-(`src/fused_metapopulation.py`). All tests reuse `scripts/gravity_validation.py`
-but are re-run on the **current** gravity kernel — the PPML-calibrated one
-($b_N \approx 1.0$, $b_d \approx 0.55$) instead of the classic
-$\sqrt{N_iN_j}/d^2$.
+(`src/fused_metapopulation.py`). The gravity kernel under test is the one the
+model actually uses — the **PPML-calibrated kernel**
+($W_{ij}^{\text{grav}} \propto N_j^{b_N}/d_{ij}^{b_d}$, $b_N \approx 1.0$,
+$b_d \approx 0.55$).
 
 **Experiment (one sentence).** From (i) 2020-Census populations, (ii)
 jurisdiction distances and (iii) each state's *monthly outbound totals* we
@@ -43,15 +45,14 @@ inbound (which is not calibrated at all).
 | Section | Test |
 |---|---|
 | §A.1 | data & calibration inputs |
-| §A.2 | gravity kernels: classic vs PPML-calibrated |
+| §A.2 | gravity kernel: PPML calibration ($b_N$, $b_d$) |
 | §A.3 | [A] outbound-totals identity |
 | §A.4 | [B] outbound directional shares (pooled / per-month / per-state) |
 | §A.5 | [B2] per-pair reconstruction · [C] top destinations |
 | §A.6 | [D] uniform temporal scaling |
 | §A.7 | [E] inbound cross-sectional · [F] inbound time series |
-| §A.8 | [G] gravity regression ($b_N$, $b_d$) |
-| §A.9 | [H] robustness: contiguous-49 subset |
-| §A.10 | reconstruction summary & limitations |"""))
+| §A.8 | [H] robustness: contiguous-49 subset |
+| §A.9 | reconstruction summary & limitations |"""))
 
 # ── 0. imports ────────────────────────────────────────────────────────────────
 cells.append(code("""import os, sys, warnings
@@ -73,7 +74,6 @@ from data_loader import load_bts_state_pairs
 warnings.filterwarnings('ignore')
 plt.rcParams.update({'figure.dpi': 110, 'savefig.dpi': 150})
 ASSETS = '../assets'
-POWER, D_MIN = 2.0, 100.0   # classic kernel params (Viboud 2006)
 
 def pear(x, y):
     if len(x) == 0 or np.std(x) == 0 or np.std(y) == 0:
@@ -148,53 +148,52 @@ print('Jan-2020 outbound (inter-state), top 5:')
 for i in np.argsort(mu0)[::-1][:5]:
     print(f'  {CODE_TO_NAME[states[i]]:<24} {out0[i]:12,.0f} pax/month')"""))
 
-# ── A.2 kernels ───────────────────────────────────────────────────────────────
-cells.append(md(r"""## §A.2 Gravity kernels — classic vs PPML-calibrated
+# ── A.2 kernel ────────────────────────────────────────────────────────────────
+cells.append(md(r"""## §A.2 Gravity kernel — PPML calibration
 
-Two candidate kernels for the directional shares $W_{ij}^{\text{grav}}$
-(row-normalised, $\sum_j W = 1$):
+The directional shares come from **one kernel** (row-normalised,
+$\sum_j W_{ij}^{\text{grav}} = 1$):
 
-- **classic (Viboud 2006):** $\sqrt{N_i N_j}\,/\,d_{ij}^{\,2}$
-- **data-calibrated (default, this model):** $N_j^{\,b_N}\,/\,d_{ij}^{\,b_d}$
-  with exponents fitted from the full 39-month panel via **PPML**
-  (Poisson pseudo-ML, origin + month fixed effects — robust to the Jensen
-  bias of log-linear OLS):
+$$W_{ij}^{\text{grav}} \propto \frac{N_j^{b_N}}{d_{ij}^{b_d}}$$
 
-$$\log F_{ijt} = \alpha_i + \gamma_t + b_N\log N_j + b_d\log d_{ij} + \varepsilon
-\qquad\text{(OLS on logs, for comparison)}$$
+i.e. a destination-population term and a distance-decay term only (the
+origin term $N_i^\eta$ is kept in the code for kernel symmetry but cancels
+under row normalisation). The exponents are fitted from the full 39-month
+BTS panel via **PPML** — Poisson pseudo-maximum-likelihood (Santos Silva &
+Tenreyro 2006):
 
-The kernel uses only $N_j$ (destination population) and $d_{ij}$ — no flows
-leak into the directional prediction beyond the per-state totals."""))
+$$F_{ijt} \sim \text{Poisson}\Big(\exp\big(\alpha_i + \gamma_t
++ b_N \ln N_j + b_d \ln d_{ij}\big)\Big)$$
+
+with origin ($\alpha_i$) and month ($\gamma_t$) fixed effects. PPML is the
+standard gravity estimator: consistent under multiplicative
+heteroskedasticity, well-behaved with zero flows, and it avoids the Jensen
+bias of log-linearising the model before estimating (the reason a
+log-log OLS fit is not used for the kernel exponents)."""))
 cells.append(code("""D = build_distance_matrix(states)
-r_ols  = fit_gravity_exponents(F, D, Npop, method='ols')
 r_ppml = fit_gravity_exponents(F, D, Npop, method='ppml')
-print('OLS : b_d = %+.3f +- %.3f | b_N = %+.3f +- %.3f | R2 = %.3f'
-      % (r_ols['b_d'], r_ols['se_d'], r_ols['b_N'], r_ols['se_N'], r_ols['r2']))
 print('PPML: b_d = %+.3f | b_N = %+.3f | deviance R2 = %.3f | converged = %s'
       % (r_ppml['b_d'], r_ppml['b_N'], r_ppml['r2'], r_ppml['converged']))
 b_N, b_d = r_ppml['b_N'], -r_ppml['b_d']   # positive distance exponent
 
-W_classic = build_gravity_kernel(states, power=POWER, min_distance_km=D_MIN)
-W_cal = build_gravity_kernel(states, b_N=b_N, b_d=b_d)
-print('kernels built: classic sqrt(NiNj)/d^2 | calibrated N_j^%.3f / d^%.3f'
-      % (b_N, b_d))"""))
+W = build_gravity_kernel(states, b_N=b_N, b_d=b_d)
+print(f'kernel: W_ij ~ N_j^{b_N:.3f} / d_ij^{b_d:.3f}  '
+      f'(row-normalised, d_min = 100 km, self-pairs = 0)')"""))
 
-cells.append(code("""fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
-for axx, Wk, lab in zip(axes, (W_classic, W_cal),
-                        ('classic $\\\\sqrt{N_i N_j}/d^2$',
-                         f'calibrated $N_j^{{{b_N:.2f}}}/d^{{{b_d:.2f}}}$')):
-    x, y = [], []
-    for i in np.where(active)[0]:
-        o = F[i, :, 0]
-        x += list(Wk[i]); y += list(o / o.sum())
-    x, y = np.array(x), np.array(y)
-    m = (x > 0) & (y > 0)
-    axx.scatter(np.log(x[m]), np.log(y[m]), s=4, alpha=0.45, color='C2')
-    axx.set_title(f'{lab}\\nPearson(log) = {pear(np.log(x[m]), np.log(y[m])):.3f} '
-                  f'| Spearman = {spear(np.log(x[m]), np.log(y[m])):.3f}', fontsize=10)
-    axx.set_xlabel('log predicted outbound share (kernel)')
-    axx.set_ylabel('log observed outbound share (Jan-2020)')
-    axx.grid(alpha=0.3)
+cells.append(code("""fig, ax = plt.subplots(figsize=(6, 5.5))
+x, y = [], []
+for i in np.where(active)[0]:
+    o = F[i, :, 0]
+    x += list(W[i]); y += list(o / o.sum())
+x, y = np.array(x), np.array(y)
+m = (x > 0) & (y > 0)
+ax.scatter(np.log(x[m]), np.log(y[m]), s=4, alpha=0.45, color='C2')
+ax.set_title(f'Kernel outbound-share prediction, Jan-2020\\n'
+             f'Pearson(log) = {pear(np.log(x[m]), np.log(y[m])):.3f} | '
+             f'Spearman = {spear(np.log(x[m]), np.log(y[m])):.3f}', fontsize=10)
+ax.set_xlabel('log predicted outbound share (kernel $N_j^{%.2f}/d^{%.2f}$)' % (b_N, b_d))
+ax.set_ylabel('log observed outbound share (Jan-2020)')
+ax.grid(alpha=0.3)
 plt.tight_layout()
 plt.savefig(f'{ASSETS}/fig68_appA_kernel_shares.png'); plt.show()
 show_fig(f'{ASSETS}/fig68_appA_kernel_shares.png')"""))
@@ -223,7 +222,7 @@ The core test: does the gravity kernel reproduce **where** the outbound
 passengers go? For each active origin $i$ and month $t$,
 $\hat p_{ij} = W_{ij}^{\text{grav}}$ is compared with the observed share
 $p_{ij}(t) = F_{ij}(t)/\sum_j F_{ij}(t)$ across all 56 destinations."""))
-cells.append(code("""def pooled_shares(Wk, month=None):
+cells.append(code("""def pooled_shares(month=None):
     x, y, lx, ly = [], [], [], []
     tsel = range(T) if month is None else [months.index(month)]
     for i in np.where(active)[0]:
@@ -232,26 +231,25 @@ cells.append(code("""def pooled_shares(Wk, month=None):
             if tot <= 0:
                 continue
             phat = o / tot
-            x += list(Wk[i]); y += list(phat)
+            x += list(W[i]); y += list(phat)
             m = phat > 0
             if m.sum() >= 2:
-                lx += list(np.log(phat[m])); ly += list(np.log(Wk[i][m]))
+                lx += list(np.log(phat[m])); ly += list(np.log(W[i][m]))
     return np.array(x), np.array(y), np.array(lx), np.array(ly)
 
-rows = []
-for lab, Wk in (('classic sqrt(NiNj)/d^2', W_classic),
-                (f'calibrated N_j^{b_N:.2f}/d^{b_d:.2f}', W_cal)):
-    x, y, lx, ly = pooled_shares(Wk)
-    print(f'{lab:<28} pooled  P = {pear(x, y):.4f} | S = {spear(x, y):.4f} '
-          f'| log-P = {pear(lx, ly):.4f}   (N={len(x):,}, Nlog={len(lx):,})')
-    x0, y0, lx0, ly0 = pooled_shares(Wk, month=(2020, 1))
-    print(f'{"":<28} Jan-2020 P = {pear(x0, y0):.4f} | S = {spear(x0, y0):.4f} '
-          f'| log-P = {pear(lx0, ly0):.4f}')
-    rows.append((lab, pear(x, y), spear(x, y), pear(x0, y0), spear(x0, y0)))
-share_summary = pd.DataFrame(rows, columns=['kernel', 'P_pooled', 'S_pooled',
-                                            'P_jan', 'S_jan'])"""))
+x, y, lx, ly = pooled_shares()
+print(f'pooled (all active state·month·dest, N={len(x):,}):')
+print(f'  Pearson(raw)  = {pear(x, y):.4f}')
+print(f'  Spearman      = {spear(x, y):.4f}')
+print(f'  Pearson(log)  = {pear(lx, ly):.4f}   (only observed dests, N={len(lx):,})')
+x0, y0, lx0, ly0 = pooled_shares(month=(2020, 1))
+print(f'Jan-2020 only:  Pearson(raw) = {pear(x0, y0):.4f} | Spearman = '
+      f'{spear(x0, y0):.4f} | Pearson(log) = {pear(lx0, ly0):.4f}')
+share_summary = pd.DataFrame([{'kernel': f'N_j^{b_N:.2f}/d^{b_d:.2f}',
+                               'P_pooled': pear(x, y), 'S_pooled': spear(x, y),
+                               'P_jan': pear(x0, y0), 'S_jan': spear(x0, y0)}])"""))
 
-cells.append(code("""# per-month pooled correlations (all months)
+cells.append(code("""# per-month pooled correlation
 mm_p, mm_s = [], []
 for t in range(T):
     a, b = [], []
@@ -259,92 +257,70 @@ for t in range(T):
         o = F[i, :, t]; tot = o.sum()
         if tot <= 0:
             continue
-        a += list(o / tot); b += list(W_cal[i])
+        a += list(o / tot); b += list(W[i])
     mm_p.append(pear(np.array(a), np.array(b)))
     mm_s.append(spear(np.array(a), np.array(b)))
-mm_pc, mm_sc = [], []
-for t in range(T):
-    a, b = [], []
-    for i in np.where(active)[0]:
-        o = F[i, :, t]; tot = o.sum()
-        if tot <= 0:
-            continue
-        a += list(o / tot); b += list(W_classic[i])
-    mm_pc.append(pear(np.array(a), np.array(b)))
-    mm_sc.append(spear(np.array(a), np.array(b)))
-print('monthly pooled share correlation, calibrated vs classic:')
-print(f'{"month":>7} | {"cal P":>6} {"cal S":>6} | {"cla P":>6} {"cla S":>6}')
+print('monthly pooled share correlation (calibrated kernel):')
+print(f'{"month":>7} | {"Pearson":>7} | {"Spearman":>8}')
 for t in [0, 3, 6, 11, 23, 35, 38]:
     y, m = months[t]
-    print(f'{y}-{m:02d} | {mm_p[t]:6.3f} {mm_s[t]:6.3f} | {mm_pc[t]:6.3f} {mm_sc[t]:6.3f}')
-print(f'calibrated: median P {np.median(mm_p):.3f} (range {np.min(mm_p):.3f}..'
-      f'{np.max(mm_p):.3f}) | classic median P {np.median(mm_pc):.3f}')"""))
+    print(f'{y}-{m:02d} | {mm_p[t]:7.3f} | {mm_s[t]:8.3f}')
+print(f'median Pearson {np.median(mm_p):.3f} (range {np.min(mm_p):.3f}..{np.max(mm_p):.3f})')"""))
 
 cells.append(code("""fig, ax = plt.subplots(figsize=(9, 3.8))
-ax.plot(range(T), mm_p, 'o-', ms=3, lw=1, color='C0', label='calibrated kernel (Pearson)')
-ax.plot(range(T), mm_s, 's--', ms=3, lw=1, color='C0', alpha=0.55, label='calibrated (Spearman)')
-ax.plot(range(T), mm_pc, 'o-', ms=3, lw=1, color='C3', alpha=0.8, label='classic kernel (Pearson)')
+ax.plot(range(T), mm_p, 'o-', ms=3, lw=1, color='C0', label='Pearson')
+ax.plot(range(T), mm_s, 's--', ms=3, lw=1, color='C0', alpha=0.55, label='Spearman')
 ax.axhline(np.median(mm_p), color='C0', lw=0.6, ls=':')
-ax.axhline(np.median(mm_pc), color='C3', lw=0.6, ls=':')
 ax.set_xticks(range(0, T, 6))
 ax.set_xticklabels([f'{y}-{m:02d}' for y, m in months[::6]], rotation=45, fontsize=8)
 ax.set_ylabel('pooled outbound-share correlation')
-ax.set_title('Monthly directional-share fit: calibrated vs classic gravity kernel')
+ax.set_title('Monthly directional-share fit (calibrated gravity kernel)')
 ax.legend(fontsize=8); ax.grid(alpha=0.3)
 plt.tight_layout()
 plt.savefig(f'{ASSETS}/fig70_appA_share_corr_monthly.png'); plt.show()
 show_fig(f'{ASSETS}/fig70_appA_share_corr_monthly.png')"""))
 
-cells.append(code("""# per-state median Pearson (calibrated) vs classic
-def per_state_medians(Wk):
-    out_l, ms_used = [], []
-    for i in np.where(active)[0]:
-        ps = []
-        for t in range(T):
-            o = F[i, :, t]; tot = o.sum()
-            if tot <= 0:
-                continue
-            rv = pear(o / tot, Wk[i])
-            if not np.isnan(rv):
-                ps.append(rv)
-        if ps:
-            out_l.append((states[i], np.median(ps), np.min(ps), np.max(ps), len(ps)))
-    return out_l
-
-med_cal = per_state_medians(W_cal)
-med_cla = per_state_medians(W_classic)
-med_cal_v = np.array([r[1] for r in med_cal])
-med_cla_v = np.array([r[1] for r in med_cla])
+cells.append(code("""# per-state median Pearson (calibrated)
+med = []
+for i in np.where(active)[0]:
+    ps = []
+    for t in range(T):
+        o = F[i, :, t]; tot = o.sum()
+        if tot <= 0:
+            continue
+        rv = pear(o / tot, W[i])
+        if not np.isnan(rv):
+            ps.append(rv)
+    if ps:
+        med.append((states[i], np.median(ps), np.min(ps), np.max(ps), len(ps)))
+med_v = np.array([r[1] for r in med])
 print('per-state median Pearson (calibrated): median %.3f | IQR [%.3f, %.3f] | '
-      'range [%.3f, %.3f]' % (np.median(med_cal_v),
-                              np.percentile(med_cal_v, 25), np.percentile(med_cal_v, 75),
-                              med_cal_v.min(), med_cal_v.max()))
-print('  (classic comparison: median %.3f)' % np.median(med_cla_v))
-worst = sorted(med_cal, key=lambda t: t[1])[:3]
-best = sorted(med_cal, key=lambda t: -t[1])[:3]
+      'range [%.3f, %.3f]' % (np.median(med_v),
+                              np.percentile(med_v, 25), np.percentile(med_v, 75),
+                              med_v.min(), med_v.max()))
+worst = sorted(med, key=lambda t: t[1])[:3]
+best = sorted(med, key=lambda t: -t[1])[:3]
 print('  worst 3:', [(CODE_TO_NAME[s], round(v, 3)) for s, v, _, _, _ in worst])
 print('  best  3:', [(CODE_TO_NAME[s], round(v, 3)) for s, v, _, _, _ in best])
 
 ps_df = pd.DataFrame(
     [{'state': s, 'name': CODE_TO_NAME[s], 'months_used': mu,
       'medPearson_cal': v, 'minPearson_cal': mn, 'maxPearson_cal': mx}
-     for s, v, mn, mx, mu in med_cal])
-clad = {s: v for s, v, _, _, _ in med_cla}
-ps_df['medPearson_classic'] = ps_df['state'].map(clad)
+     for s, v, mn, mx, mu in med])
 ps_df = ps_df.sort_values('medPearson_cal', ascending=False).reset_index(drop=True)
 ps_df.to_csv('../scripts/appendixA_state_corr.csv', index=False)
 print('per-state table saved -> scripts/appendixA_state_corr.csv')"""))
 
-cells.append(code("""order = np.argsort(med_cal_v)
+cells.append(code("""order = np.argsort(med_v)
 fig, ax = plt.subplots(figsize=(7, 11))
 ypos = np.arange(len(order))
-ax.barh(ypos, med_cla_v[order], height=0.45, color='C3', alpha=0.35, label='classic kernel')
-ax.barh(ypos + 0.45, med_cal_v[order], height=0.45, color='C0', alpha=0.85, label='calibrated kernel')
-ax.set_yticks(ypos + 0.225)
-ax.set_yticklabels([CODE_TO_NAME[med_cal[i][0]] for i in order], fontsize=6.5)
+ax.barh(ypos, med_v[order], height=0.8, color='C0', alpha=0.85)
+ax.set_yticks(ypos)
+ax.set_yticklabels([CODE_TO_NAME[med[i][0]] for i in order], fontsize=6.5)
 ax.axvline(0, color='grey', lw=0.6)
+ax.axvline(np.median(med_v), color='C0', lw=0.8, ls=':', label='median')
 ax.set_xlabel('median Pearson (outbound shares, 39 months)')
-ax.set_title('Per-state directional-share fit: calibrated vs classic')
+ax.set_title('Per-state directional-share fit (calibrated kernel)')
 ax.legend(fontsize=8); ax.grid(axis='x', alpha=0.3)
 plt.tight_layout()
 plt.savefig(f'{ASSETS}/fig71_appA_state_corr.png'); plt.show()
@@ -360,9 +336,9 @@ the literal "data restoration" test of the gravity model.
 
 **Top destinations.** Per active state-month, does the kernel name the same
 largest destination(s) as the data?"""))
-cells.append(code("""pred_cal = (s[:, None, :] * mu0[:, None, None] * W_cal[:, :, None] * T_MO)
+cells.append(code("""pred = (s[:, None, :] * mu0[:, None, None] * W[:, :, None] * T_MO)
 m2 = F > 0
-a = pred_cal[m2]; b = F[m2]
+a = pred[m2]; b = F[m2]
 lg = (a > 0) & (b > 0)
 logy = np.log(b[lg]); logp = np.log(a[lg])
 r2log = 1 - np.sum((logy - logp) ** 2) / np.sum((logy - logy.mean()) ** 2)
@@ -371,12 +347,7 @@ print(f'nonzero pairs (i,j,t): {m2.sum():,}')
 print(f'Pearson(raw) = {pear(a, b):.4f} | Spearman = {spear(a, b):.4f}')
 print(f'Pearson(log-log) = {pear(logp, logy):.4f} | Spearman(log-log) = {spear(logp, logy):.4f}')
 print(f'R2 (log-log) = {r2log:.3f} | median |log2(pred/obs)| = {np.median(np.abs(np.log2(fac))):.3f} '
-      f'(median factor error = {2 ** np.median(np.abs(np.log2(fac))):.2f}x)')
-
-pred_cla = (s[:, None, :] * mu0[:, None, None] * W_classic[:, :, None] * T_MO)
-a2 = pred_cla[m2]
-print(f'classic: Pearson(raw) = {pear(a2, b):.4f} | Spearman = {spear(a2, b):.4f} '
-      f'| Pearson(log-log) = {pear(np.log(a2[lg]), logy):.4f}')"""))
+      f'(median factor error = {2 ** np.median(np.abs(np.log2(fac))):.2f}x)')"""))
 
 cells.append(code("""fig, ax = plt.subplots(figsize=(6.5, 6))
 ax.scatter(logp, logy, s=3, alpha=0.35, color='C0')
@@ -384,28 +355,25 @@ lo, hi = min(logp.min(), logy.min()), max(logp.max(), logy.max())
 ax.plot([lo, hi], [lo, hi], 'k--', lw=0.8, label='1:1')
 ax.set_xlabel('log predicted flow  s_i mu0_i W_ij T_mo  (pax/month)')
 ax.set_ylabel('log observed flow  F_ij(t)  (pax/month)')
-ax.set_title(f'Per-pair reconstruction, calibrated kernel\\n'
+ax.set_title(f'Per-pair reconstruction (calibrated kernel)\\n'
              f'Pearson(log) = {pear(logp, logy):.3f} | R2(log) = {r2log:.3f} | N = {len(logp):,}')
 ax.legend(fontsize=8); ax.grid(alpha=0.3)
 plt.tight_layout()
 plt.savefig(f'{ASSETS}/fig69_appA_pair_reconstruction.png'); plt.show()
 show_fig(f'{ASSETS}/fig69_appA_pair_reconstruction.png')"""))
 
-cells.append(code("""h1_cal, h1_cla, h3_cal = [], [], []
+cells.append(code("""h1, h3 = [], []
 for i in np.where(active)[0]:
     for t in range(T):
         o = F[i, :, t]
         if o.sum() <= 0:
             continue
-        h1_cal.append(np.argmax(o) == np.argmax(W_cal[i]))
-        h1_cla.append(np.argmax(o) == np.argmax(W_classic[i]))
-        s3o = set(np.argsort(o)[-3:]); s3g = set(np.argsort(W_cal[i])[-3:])
-        h3_cal.append(len(s3o & s3g) / 3)
-print(f'state-months with traffic: {len(h1_cal):,}')
-print(f'top-1 destination match  : calibrated {np.mean(h1_cal) * 100:.1f}% '
-      f'({np.sum(h1_cal)}/{len(h1_cal)}) | classic {np.mean(h1_cla) * 100:.1f}% '
-      f'({np.sum(h1_cla)}/{len(h1_cla)})')
-print(f'top-3 destination overlap: calibrated {np.mean(h3_cal) * 100:.1f}%')"""))
+        h1.append(np.argmax(o) == np.argmax(W[i]))
+        s3o = set(np.argsort(o)[-3:]); s3g = set(np.argsort(W[i])[-3:])
+        h3.append(len(s3o & s3g) / 3)
+print(f'state-months with traffic: {len(h1):,}')
+print(f'top-1 destination match  : {np.mean(h1) * 100:.1f}% ({np.sum(h1)}/{len(h1)})')
+print(f'top-3 destination overlap: {np.mean(h3) * 100:.1f}%')"""))
 
 # ── A.6 temporal ──────────────────────────────────────────────────────────────
 cells.append(md(r"""## §A.6 [D] Uniform temporal scaling
@@ -442,7 +410,7 @@ print(f'pooled regression log(F_ij/F_jan) = {bfit:.3f} * log(s_i) + {bres:.3f} '
 cells.append(code("""fig, ax = plt.subplots(figsize=(6.5, 6))
 ax.scatter(Xd, Yd, s=3, alpha=0.3, color='C1')
 xs = np.linspace(Xd.min(), Xd.max(), 50)
-ax.plot(xs, bfit * xs + bres, 'k-', lw=1.4, label=f'OLS slope {bfit:.3f}')
+ax.plot(xs, bfit * xs + bres, 'k-', lw=1.4, label=f'linear fit slope {bfit:.3f}')
 ax.plot(xs, xs, 'k--', lw=0.8, label='1:1')
 ax.set_xlabel('log s_i(t)  (origin mobility scale)')
 ax.set_ylabel('log F_ij(t)/F_ij(Jan-2020)  (pair relative flow)')
@@ -462,7 +430,7 @@ uses only the **outbound** calibration. Two views:
   the 56 destinations (does gravity rank the hubs correctly?);
 - **[F] time series** — per destination, the 39-month curve (shares the
   national COVID trend, so expect high correlations)."""))
-cells.append(code("""pred_in = W_cal.T @ (s * mu0[:, None]) * T_MO      # (n, T) pax/month in
+cells.append(code("""pred_in = W.T @ (s * mu0[:, None]) * T_MO      # (n, T) pax/month in
 obs_in = F.sum(axis=0)
 r_cs = np.array([pear(pred_in[:, t], obs_in[:, t]) for t in range(T)])
 r_cs = r_cs[~np.isnan(r_cs)]
@@ -500,9 +468,8 @@ axes[0].grid(alpha=0.3)
 lg2 = obs_in.ravel() > 0
 axes[1].scatter(np.log(pred_in.ravel()[lg2]), np.log(obs_in.ravel()[lg2]),
                 s=4, alpha=0.4, color='C5')
-axes[1].plot([np.log(pred_in.ravel()[lg2]).min(), np.log(pred_in.ravel()[lg2]).max()],
-             [np.log(pred_in.ravel()[lg2]).min(), np.log(pred_in.ravel()[lg2]).max()],
-             'k--', lw=0.8)
+lo = np.log(pred_in.ravel()[lg2]).min(); hi = np.log(pred_in.ravel()[lg2]).max()
+axes[1].plot([lo, hi], [lo, hi], 'k--', lw=0.8)
 axes[1].set_xlabel('log predicted inbound (pax/month)')
 axes[1].set_ylabel('log observed inbound (pax/month)')
 axes[1].set_title(f'[E] pooled inbound, log-log\\nPearson = '
@@ -512,65 +479,19 @@ plt.tight_layout()
 plt.savefig(f'{ASSETS}/fig73_appA_inbound.png'); plt.show()
 show_fig(f'{ASSETS}/fig73_appA_inbound.png')"""))
 
-# ── A.8 regression ────────────────────────────────────────────────────────────
-cells.append(md(r"""## §A.8 [G] Gravity regression
-
-The reduced-form gravity equation on the **raw flows** (no calibration),
-pooled and per-month:
-
-$$\log F_{ijt} = \alpha_i + \gamma_t + b_N\log N_j + b_d\log d_{ij} + \varepsilon$$
-
-The estimated $b_N$, $b_d$ tell us what exponents the data itself wants.
-The calibrated kernel uses the PPML versions ($b_N \approx 1.0$,
-$b_d \approx 0.55$), not these OLS ones — OLS on logs is Jensen-biased
-(underestimates magnitude) and is shown for comparison."""))
-cells.append(code("""rows_g = np.argwhere(F > 0)
-o = rows_g[:, 0]; d = rows_g[:, 1]; tt = rows_g[:, 2]
-y = np.log(F[o, d, tt].astype(float))
-X = np.column_stack([np.log(np.maximum(D[o, d], 10.0)), np.log(Npop[d]),
-                     np.eye(n)[o], np.eye(T)[tt]])
-coef, _, _, _ = np.linalg.lstsq(X, y, rcond=None)
-pred = X @ coef
-ss_res = float(((y - pred) ** 2).sum()); ss_tot = float(((y - y.mean()) ** 2).sum())
-r2g = 1 - ss_res / ss_tot
-sigma2 = ss_res / (len(y) - X.shape[1])
-se = np.sqrt(np.diag(sigma2 * np.linalg.pinv(X.T @ X)))
-print(f'pooled OLS (N={len(y):,}, df={len(y) - X.shape[1]:,}):')
-print(f'  b_d = {coef[0]:+.3f} +- {se[0]:.3f}   (kernel exponent used: -{b_d:.2f})')
-print(f'  b_N = {coef[1]:+.3f} +- {se[1]:.3f}   (kernel exponent used: {b_N:.2f})')
-print(f'  R2  = {r2g:.3f}')
-bs_d, bs_n, rs2 = [], [], []
-for t in range(T):
-    m = tt == t
-    Xt = np.column_stack([np.log(np.maximum(D[o[m], d[m]], 10.0)),
-                          np.log(Npop[d[m]]), np.eye(n)[o[m]]])
-    yt = y[m]
-    ct, _, _, _ = np.linalg.lstsq(Xt, yt, rcond=None)
-    pt = Xt @ ct
-    r2t = 1 - ((yt - pt) ** 2).sum() / ((yt - yt.mean()) ** 2).sum()
-    bs_d.append(ct[0]); bs_n.append(ct[1]); rs2.append(r2t)
-bs_d = np.array(bs_d); bs_n = np.array(bs_n); rs2 = np.array(rs2)
-print(f'per-month: b_d mean {bs_d.mean():+.3f} +- {bs_d.std():.3f} '
-      f'(range [{bs_d.min():+.3f}, {bs_d.max():+.3f}])')
-print(f'          b_N mean {bs_n.mean():+.3f} +- {bs_n.std():.3f} '
-      f'(range [{bs_n.min():+.3f}, {bs_n.max():+.3f}])')
-print(f'          R2  mean {rs2.mean():.3f} +- {rs2.std():.3f} '
-      f'(range [{rs2.min():.3f}, {rs2.max():.3f}])')"""))
-
-# ── A.9 robustness ────────────────────────────────────────────────────────────
-cells.append(md(r"""## §A.9 [H] Robustness — contiguous 49 only
+# ── A.8 robustness ────────────────────────────────────────────────────────────
+cells.append(md(r"""## §A.8 [H] Robustness — contiguous 49 only
 
 Re-run the directional-share test on the **contiguous 48 states + DC**
 (excluding AK, HI and the five territories) to make sure results are not
-driven by the small long-haul/territory markets. The kernel is rebuilt and —
-for the calibrated variant — the exponents refit on the subset."""))
+driven by the small long-haul/territory markets. The kernel is rebuilt and
+the PPML exponents refit on the subset."""))
 cells.append(code("""idx = [states.index(c) for c in CONTIGUOUS]
-Wc_cla = build_gravity_kernel(CONTIGUOUS, power=POWER, min_distance_km=D_MIN)
 r_ppml49 = fit_gravity_exponents(F[np.ix_(idx, idx, range(T))],
                                  D[np.ix_(idx, idx)], Npop[idx], method='ppml')
-Wc_cal = build_gravity_kernel(CONTIGUOUS, b_N=r_ppml49['b_N'], b_d=-r_ppml49['b_d'])
+Wc = build_gravity_kernel(CONTIGUOUS, b_N=r_ppml49['b_N'], b_d=-r_ppml49['b_d'])
 print(f'contiguous-49 PPML refit: b_N = {r_ppml49["b_N"]:.3f} | b_d = '
-      f'{-r_ppml49["b_d"]:.3f}')
+      f'{-r_ppml49["b_d"]:.3f} | deviance R2 = {r_ppml49["r2"]:.3f}')
 
 def pooled_contig(Wk):
     x, y = [], []
@@ -584,49 +505,46 @@ def pooled_contig(Wk):
             x += list(Wk[ii]); y += list(o / tot)
     return np.array(x), np.array(y)
 
-a, b = pooled_contig(Wc_cla)
-lg = (a > 0) & (b > 0)
-print(f'classic    : pooled P = {pear(a, b):.4f} | S = {spear(a, b):.4f} | '
-      f'log-P = {pear(np.log(a[lg]), np.log(b[lg])):.4f} | N = {len(a):,}')
-a, b = pooled_contig(Wc_cal)
-print(f'calibrated : pooled P = {pear(a, b):.4f} | S = {spear(a, b):.4f} | N = {len(a):,}')
-print('(full-56 reference: classic P = 0.35, calibrated P = 0.45, §A.4)')"""))
+a, b = pooled_contig(Wc)
+print(f'contiguous-49 pooled: Pearson = {pear(a, b):.4f} | Spearman = '
+      f'{spear(a, b):.4f} | N = {len(a):,}')
+print('(full-56 reference: Pearson = 0.45, §A.4)')"""))
 
-# ── A.10 summary ──────────────────────────────────────────────────────────────
-cells.append(md(r"""## §A.10 Reconstruction summary & limitations
+# ── A.9 summary ───────────────────────────────────────────────────────────────
+cells.append(md(r"""## §A.9 Reconstruction summary & limitations
 
-**Does the gravity model reproduce the BTS aviation flows?** Partly —
-the numbers separate cleanly into a strong temporal half and a moderate
+**Does the calibrated gravity model reproduce the BTS aviation flows?**
+The numbers separate cleanly into a strong temporal half and a moderate
 spatial half:
 
 | What | Result |
 |---|---|
 | outbound totals (calibrated) | exact to 1e-16 (by construction) |
+| kernel exponents (PPML) | $b_N \approx 1.00$, $b_d \approx 0.55$, deviance R² 0.70 |
 | uniform temporal scaling | pair-correlation median **0.87**, pooled slope **1.15** vs 1.00 |
-| directional shares (pooled) | calibrated **P 0.45 / S 0.58** vs classic 0.35 / 0.46 |
+| directional shares (pooled) | **P 0.45 / S 0.58** |
 | directional shares (per-state median) | **0.60** (IQR 0.49–0.78) |
 | per-pair reconstruction | Pearson(raw) **0.82**; log-log **0.60**, R²(log) 0.25, median error ×2.6 |
-| top-1 destination | calibrated **34.5%** vs classic 20.0% |
+| top-1 destination | **34.5%** |
 | inbound (uncalibrated), cross-sectional | median **0.83** per month |
 | inbound (uncalibrated), time series | median **0.98** (shares the COVID trend) |
-| gravity regression | $b_N \approx 1.10$, $b_d \approx -0.72$, R² 0.41; stable across months |
-| contiguous-49 robustness | calibrated P **0.56**, classic 0.28 |
+| contiguous-49 robustness | P **0.56** |
 
 **Interpretation.** Population and distance alone (plus per-state totals)
 recover the *rank order* of the directional structure and almost all of the
 *temporal* evolution; but the residual spatial scatter is large (median
 per-pair error ×2.6), and the top-1 destination is right only a third of
-the time. The PPML-calibrated kernel is a clear improvement over
-$\sqrt{N_iN_j}/d^2$ on every axis.
+the time.
 
 **Limitations (honest).**
 
 1. **Air ≠ all travel.** BTS T-100 covers US air carriers only. Most
    inter-state travel — and most COVID-19 seeding — is by **car**
-   (FHWA/StreetLight data show autos dominate the state-pair volumes and
-   collapsed differently during the pandemic). The calibrated $s_i(t)$ is
-   an *aviation* mobility scale; the metapopulation uses it as a proxy for
-   all human mobility (see also notebook 08 §8.11 item 4).
+   (FHWA VMT data, `data/fhwa_vmt_*_monthly.csv`: April-2020 air collapsed
+   to ≈5% of Jan-2020, car VMT only to ≈64%). The calibrated $s_i(t)$ is an
+   *aviation* mobility scale; the metapopulation uses it as a proxy for all
+   human mobility (see notebook 08 §8.11 item 4). A weighted air+car
+   mobility factor is the documented next step.
 2. **Calibrated totals carry no information** — the experiment's power lies
    in the directional tests, which are moderate.
 3. **Distance metric**: state centroid distances with a 100 km floor;
@@ -636,36 +554,36 @@ $\sqrt{N_iN_j}/d^2$ on every axis.
 5. The inbound time series ([F], median 0.98) is **not** evidence of
    predictive power: every state shares the same national COVID trend, so
    the curves are collinear."""))
-cells.append(code("""pp = pred_cal[m2]; ff = F[m2]
+cells.append(code("""pp = pred[m2]; ff = F[m2]
 mm = (pp > 0) & (ff > 0)
+a49, b49 = pooled_contig(Wc)
 summary = pd.DataFrame({
     'metric': [
         'outbound totals (max rel err)',
-        'share P pooled (cal/classic)', 'share S pooled (cal/classic)',
+        'share P pooled', 'share S pooled',
         'share P per-state median',
-        'per-pair P raw (cal)', 'per-pair P log-log (cal)', 'per-pair R2 log (cal)',
-        'median |log2 factor err| (cal)',
-        'top-1 dest (cal/classic)',
+        'per-pair P raw', 'per-pair P log-log', 'per-pair R2 log',
+        'median |log2 factor err|',
+        'top-1 dest',
         'temporal pair-corr median', 'temporal pooled slope',
         'inbound cross-sectional median', 'inbound time-series median',
-        'OLS b_N (pooled)', 'OLS b_d (pooled)', 'OLS R2 (pooled)',
-        'contiguous-49 P (cal/classic)',
+        'kernel exponents (PPML)',
+        'contiguous-49 P',
     ],
     'value': [
         '%.1e' % np.max(err[active] / np.maximum(out[active], 1)),
-        '%.3f / %.3f' % (share_summary['P_pooled'][1], share_summary['P_pooled'][0]),
-        '%.3f / %.3f' % (share_summary['S_pooled'][1], share_summary['S_pooled'][0]),
-        '%.3f' % np.median(med_cal_v),
+        '%.3f' % share_summary['P_pooled'][0],
+        '%.3f' % share_summary['S_pooled'][0],
+        '%.3f' % np.median(med_v),
         '%.3f' % pear(pp, ff),
         '%.3f' % pear(np.log(pp[mm]), np.log(ff[mm])),
         '%.3f' % r2log,
         '%.2f' % np.median(np.abs(np.log2(pp[mm] / ff[mm]))),
-        '%.1f%% / %.1f%%' % (np.mean(h1_cal) * 100, np.mean(h1_cla) * 100),
+        '%.1f%%' % (np.mean(h1) * 100),
         '%.3f' % np.median(rs_d), '%.3f' % bfit,
         '%.3f' % np.median(r_cs), '%.3f' % np.median(rv_arr),
-        '%.3f' % coef[1], '%.3f' % coef[0], '%.3f' % r2g,
-        '%.3f / %.3f' % (pear(pooled_contig(Wc_cal)[0], pooled_contig(Wc_cal)[1]),
-                         pear(pooled_contig(Wc_cla)[0], pooled_contig(Wc_cla)[1])),
+        'b_N=%.3f, b_d=%.3f' % (b_N, b_d),
+        '%.3f' % pear(a49, b49),
     ],
 })
 from IPython.display import display
