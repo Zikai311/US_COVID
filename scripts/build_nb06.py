@@ -519,7 +519,7 @@ for c in cells:
     if c['cell_type'] == 'markdown':
         txt = c['source'] if isinstance(c['source'], str) else ''.join(c['source'])
         txt = txt.replace('\\\\', '\\')
-        c['source'] = txt.split('\n')
+        c['source'] = txt   # keep as a multi-line string (nbconvert-safe)
 
 nb['cells'] = cells
 nb['metadata'] = {
