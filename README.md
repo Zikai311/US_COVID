@@ -63,7 +63,8 @@ Finial_Project/
 │   ├── 08_metapopulation.ipynb       # rebuilt 2026-08-06 (build_nb08.py)
 │   └── 09_conclusion.ipynb            # final synthesis → our COVID model
 │   ├── appendix_A.ipynb              # gravity data-reconstruction report (build_appendix_a.py)
-│   └── appendix_B.ipynb              # Omicron wave-5 run (build_appendix_b.py)
+│   ├── appendix_B.ipynb              # Omicron wave-5 run (build_appendix_b.py)
+│   └── appendix_C.ipynb              # model V vs CDC vaccination data (build_appendix_c.py)
 │
 ├── src/                # Python modules
 │   ├── sir.py         # SIR model implementation
@@ -208,7 +209,7 @@ Individual-level simulation:
 ## Visualizations
 
 The project generates:
-- **58 figures in `assets/`** (currently fig29–fig86, dpi=300): epidemic
+- **61 figures in `assets/`** (currently fig29–fig89, dpi=300): epidemic
   dynamics, parameter sweeps, network structures, degree distributions,
   (notebook 08) gravity-kernel validation, per-state β estimates, national &
   state fits, spatial onset timing, mobility sensitivity, the β(t) NPI fit, and the SEIRV
@@ -282,7 +283,7 @@ Optional:
 
 ### Estimated Completion
 - Complete: all planned notebooks and modules build and execute
-- Figures: 58 in `assets/` (fig29–fig86)
+- Figures: 61 in `assets/` (fig29–fig89)
 
 ---
 
