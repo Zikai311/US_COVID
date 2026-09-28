@@ -124,11 +124,14 @@ for name, lab, x, col in boxes:
     ax.text(x + 0.75, 1.3, name, ha='center', va='center', fontsize=16, fontweight='bold')
     ax.text(x + 0.75, 0.38, lab, ha='center', va='center', fontsize=9)
 arrows = [('S', 'E', r'$\\beta\\cdot SI/N$'), ('E', 'I', r'$\\sigma E$'), ('I', 'R', r'$\\gamma I$')]
-pos = {b[0]: b[2] + 1.5 for b in boxes}
-for a, b, lab in arrows:
-    ax.add_patch(FancyArrowPatch((pos[a], 1.1), (pos[b] - 0.4, 1.1),
+left = {box[0]: box[2] for box in boxes}
+right = {box[0]: box[2] + 1.5 for box in boxes}
+for source, target, label in arrows:
+    start, end = right[source] + 0.05, left[target] - 0.05
+    ax.add_patch(FancyArrowPatch((start, 1.1), (end, 1.1),
                                  arrowstyle='-|>', mutation_scale=18, color='k'))
-    ax.text((pos[a] + pos[b]) / 2 - 0.35, 1.42, lab, fontsize=10, color='#7B241C')
+    ax.text((start + end) / 2, 1.38, label, ha='center', va='bottom',
+            fontsize=10, color='#7B241C')
 ax.set_title('Four compartments, three arrows: one person\\'s journey through the disease', fontsize=12)
 plt.tight_layout(); plt.savefig(f'{ASSETS}/fig82_compartment.png'); plt.show()
 show_fig(f'{ASSETS}/fig82_compartment.png')"""))
